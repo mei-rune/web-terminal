@@ -2,6 +2,7 @@ package main
 
 import (
 	"bitbucket.org/kardianos/osext"
+	"bytes"
 	"code.google.com/p/go.crypto/ssh"
 	"code.google.com/p/go.net/websocket"
 	"flag"
@@ -11,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 )
@@ -190,11 +192,39 @@ func main() {
 		return
 	}
 
+	files := []string{"web-terminal",
+		filepath.Join("lib", "web-terminal"),
+		filepath.Join("..", "lib", "web-terminal"),
+		filepath.Join(executableFolder, "static"),
+		filepath.Join(executableFolder, "web-terminal"),
+		filepath.Join(executableFolder, "lib", "web-terminal"),
+		filepath.Join(executableFolder, "..", "lib", "web-terminal")}
+	file := ""
+	for _, nm := range files {
+		if st, e := os.Stat(nm); nil == e && nil != st && st.IsDir() {
+			file = nm
+			break
+		}
+	}
+	if "" == file {
+		buffer := bytes.NewBuffer(make([]byte, 0, 2048))
+		buffer.WriteString("[warn] root path is not found:\r\n")
+		for _, nm := range files {
+			buffer.WriteString("\t\t")
+			buffer.WriteString(nm)
+			buffer.WriteString("\r\n")
+		}
+		buffer.Truncate(buffer.Len() - 2)
+		log.Println(buffer)
+		return
+	}
+
 	http.Handle("/ssh", websocket.Handler(SSHShell))
 	http.Handle("/telnet", websocket.Handler(TelnetShell))
 	//http.Handle("/", http.FileServer(http.Dir(filepath.Join(executableFolder, "static"))))
-	http.Handle("/static/", http.FileServer(http.Dir(executableFolder)))
-	fmt.Println("[web-terminal] listen at '" + *listen + "'")
+	http.Handle("/", http.FileServer(http.Dir(file)))
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(file))))
+	fmt.Println("[web-terminal] listen at '" + *listen + "' with root is '" + file + "'")
 	err := http.ListenAndServe(*listen, nil)
 	if err != nil {
 		fmt.Println("ListenAndServe: " + err.Error())
