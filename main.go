@@ -162,31 +162,15 @@ func SSHShell(ws *websocket.Conn) {
 		logString(ws, "request for pseudo terminal failed:"+err.Error())
 		return
 	}
-	stdin, err := session.StdinPipe()
-	if nil != err {
-		logString(ws, "create stdin failed:"+err.Error())
-		return
-	}
-	stdout, err := session.StdoutPipe()
-	if nil != err {
-		logString(ws, "create stdou failed:"+err.Error())
-		return
-	}
+
+	session.Stdout = ws
+	session.Stderr = ws
+	session.Stdin = ws
 	if err := session.Shell(); err != nil {
 		logString(ws, "Unable to execute command:"+err.Error())
 		return
 	}
-	go func() {
-		_, err := io.Copy(stdin, warp("client:", ws))
-		if err != nil {
-			logString(nil, "copy of stdin failed:"+err.Error())
-		}
-		stdin.Close()
-	}()
-	if _, err := io.Copy(ws, warp("server:", stdout)); err != nil {
-		logString(ws, "copy of stdout failed:"+err.Error())
-		return
-	}
+	session.Wait()
 }
 
 func TelnetShell(ws *websocket.Conn) {
