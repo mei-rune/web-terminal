@@ -6,6 +6,7 @@ import (
 	"code.google.com/p/go.crypto/ssh"
 	"code.google.com/p/go.net/websocket"
 	"code.google.com/p/mahonia"
+	//"encoding/hex"
 	"flag"
 	"fmt"
 	"io"
@@ -16,7 +17,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
+	"strings"
 )
 
 var (
@@ -26,49 +29,103 @@ var (
 	commands = map[string]string{}
 )
 
-type warpWriter struct {
-	nm      string
+type consoleWriter struct {
+	out io.Writer
+}
+
+func (w *consoleWriter) Write(p []byte) (c int, e error) {
+	fmt.Println(p)
+	return w.out.Write(p)
+}
+
+type decodeWriter struct {
 	out     io.Writer
-	buf     []byte
+	buf     [8]byte
+	length  int
 	decoder mahonia.Decoder
 }
 
-func (w *warpWriter) Write(p []byte) (c int, e error) {
-	if 0 == len(w.buf) {
-		n, cdata, e := w.decoder.Translate(p, false)
+func (w *decodeWriter) Write(p []byte) (c int, e error) {
+	data := p
+	if 0 != w.length {
+		if len(p) <= 8-w.length {
+			copy(w.buf[w.length:], p)
+			w.length += len(p)
+			n, cdata, e := w.decoder.Translate(w.buf[:w.length], false)
+			if nil != e {
+				return 0, e
+			}
+			if 0 == n {
+				//fmt.Println(w.length)
+				//fmt.Println(hex.EncodeToString(w.buf[:]))
+				return len(p), nil
+			}
+			//fmt.Println(string(cdata))
+			if _, e = w.out.Write(cdata); nil != e {
+				return 0, e
+			}
+			w.length -= n
+
+			if 0 != w.length {
+				copy(w.buf[:], w.buf[n:])
+			}
+			//fmt.Println(w.length)
+			//fmt.Println(hex.EncodeToString(w.buf[:]))
+			return len(p), nil
+		}
+		old := w.length
+		copy(w.buf[w.length:], data[:8-w.length])
+		w.length = 8
+		n, cdata, e := w.decoder.Translate(w.buf[:], false)
 		if nil != e {
 			return 0, e
 		}
-		if n != len(p) {
-			w.buf = append(w.buf, p[n:]...)
+		if 0 == n {
+			panic("n == 0?")
 		}
-		os.Stdout.Write(cdata)
-		if _, e = w.out.Write(cdata); nil != e {
-			return 0, e
+		if old > n {
+			panic("old > n?")
 		}
-		return len(p), nil
-	} else {
-		w.buf = append(w.buf, p...)
-		n, cdata, e := w.decoder.Translate(w.buf, false)
-		if nil != e {
-			return 0, e
+		w.length -= n
+		if nil != cdata {
+			//fmt.Println(string(cdata))
+			if _, e = w.out.Write(cdata); nil != e {
+				return 0, e
+			}
 		}
-		if n == len(w.buf) {
-			w.buf = w.buf[0:0]
-		} else {
-			w.buf = w.buf[n:]
-		}
-		os.Stdout.Write(cdata)
-		if _, e = w.out.Write(cdata); nil != e {
-			return 0, e
-		}
-		return len(p), nil
+		data = p[n-old:]
 	}
+
+	n, cdata, e := w.decoder.Translate(data, false)
+	if nil != e {
+		return 0, e
+	}
+	if nil != cdata {
+		//fmt.Println(string(cdata))
+		if _, e = w.out.Write(cdata); nil != e {
+			return 0, e
+		}
+	}
+	w.length = len(data) - n
+	if 0 != w.length {
+		if 8 <= w.length {
+			panic("8 <= w.length?")
+		}
+		copy(w.buf[:], data[n:])
+		w.length = len(data) - n
+	}
+
+	//fmt.Println(w.length)
+	//fmt.Println(hex.EncodeToString(w.buf[:]))
+	return len(p), nil
 }
 
-func warpW(nm string, dst io.Writer) io.Writer {
+func decodeBy(charset string, dst io.Writer) io.Writer {
+	if "UTF-8" == strings.ToUpper(charset) || "UTF8" == strings.ToUpper(charset) {
+		return dst
+	}
 	//if *debug {
-	return &warpWriter{nm: nm, out: dst, buf: make([]byte, 0, 8), decoder: mahonia.GetCharset("GB18030").NewDecoder()}
+	return &decodeWriter{out: dst, decoder: mahonia.GetCharset(charset).NewDecoder()}
 	//} else {
 	//	return dst
 	//}
@@ -208,6 +265,14 @@ func TelnetShell(ws *websocket.Conn) {
 func ExecShell(ws *websocket.Conn) {
 	defer ws.Close()
 	pa := ws.Request().URL.Query().Get("exec")
+	charset := ws.Request().URL.Query().Get("charset")
+	if "" == charset {
+		if "windows" == runtime.GOOS {
+			charset = "GB18030"
+		} else {
+			charset = "UTF-8"
+		}
+	}
 	args := make([]string, 0, 10)
 	vars := ws.Request().URL.Query()
 	for i := 0; i < 1000; i++ {
@@ -229,7 +294,7 @@ func ExecShell(ws *websocket.Conn) {
 	// environments = append(environments, os_env...)
 	// environments = append(environments, "PROCMGR_ID="+os.Args[0])
 	// cmd.Env = environments
-	cmd.Stderr = warpW("server:", ws)
+	cmd.Stderr = decodeBy(charset, ws)
 	cmd.Stdout = cmd.Stderr
 	if e := cmd.Run(); nil != e {
 		io.WriteString(ws, e.Error())
