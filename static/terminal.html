@@ -1,0 +1,110 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Simple TTY</title>
+        <link rel="shortcut icon" href="/static/favicon.ico">
+        <style>
+            html {
+                background: #555;
+            }
+            .terminal {
+                margin: 20px auto;
+                width: 1280px;
+                height: 660px;
+                border: #000 solid 5px;
+                font-family: Menlo, monospace;
+                font-size: 13px;
+                color: #f0f0f0;
+                background: #000;
+            }
+
+            .terminal-cursor {
+                color: #000;
+                background: #f0f0f0;
+            }
+        </style>
+    </head>
+    <body>
+        <script src="/static/term.js"></script>
+        <script>
+            //根据QueryString参数名称获取值
+            function getQueryStringByName(name){
+              var result = location.search.match(new RegExp("[\?\&]" + name+ "=([^\&]+)","i"));
+              if(result == null || result.length < 1){
+                return "";
+              }
+              return result[1];
+            };
+            function startsWith(s, prefix){
+              return s.indexOf(prefix) == 0;
+            };
+
+            var protocol=getQueryStringByName("protocol")
+            var hostname=getQueryStringByName("hostname")
+            var port=getQueryStringByName("port")
+
+            window.addEventListener('load', function() {
+                if (undefined == hostname || null == hostname || "" == hostname) {
+                    alert("hostname is empty.")
+                    return
+                }
+                if (undefined == protocol || null == protocol || "" == protocol) {
+                  protocol= "ssh"
+                  if (undefined == port || null == port || "" == port) {
+                    port= "22"
+                  }
+                } else if( "telnet" == protocol) {
+                  if (undefined == port || null == port || "" == port) {
+                    port= "23"
+                  }
+                } else if( "ssh" == protocol) {
+                  if (undefined == port || null == port || "" == port) {
+                    port= "22"
+                  }
+                }
+
+                // var parts = document.location.pathname.split('/')
+                //   , base = parts.slice(0, parts.length - 1).join('/') + '/'
+                //   , resource = base.substring(1) + 'ssh';
+                var target_url = "ws://" + document.location.host +"/"+protocol+"?hostname="+hostname+"&port="+port+"&user=mfk&password=mfk&columns=160&rows=44"
+                console.log(target_url)
+                var socket = new WebSocket(target_url);
+                socket.onopen = function() {
+                    var term = new Terminal({
+                        cols: 160,
+                        rows: 44,
+                        colors: Terminal.xtermColors
+                    });
+
+                    term.on('data', function(data) {
+                        console.log(data)
+                        socket.send(data);
+                    });
+
+                    term.on('title', function(title) {
+                        document.title = title;
+                    });
+
+                    term.open(document.body);
+
+                    socket.onmessage = function(data) {
+                      console.log(data.data)
+                      if(startsWith(data.data, "%tpt%")) {
+                        alert(data.data.substring(5));
+                      } else {
+                        term.write(data.data);
+                      }
+                    };
+                    window.term = term;
+                    window.socket = socket;
+                }
+                socket.onerror = function() {
+                  alert("连接出错！");
+                };
+                socket.onclose  = function() {
+                    //term.destroy();
+                };
+            }, false);
+        </script>
+    </body>
+</html>

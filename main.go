@@ -5,48 +5,85 @@ import (
 	"bytes"
 	"code.google.com/p/go.crypto/ssh"
 	"code.google.com/p/go.net/websocket"
+	"code.google.com/p/mahonia"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
-	"time"
 )
 
 var (
 	listen = flag.String("listen", ":37079", "the port of http")
 	debug  = flag.Bool("debug", false, "show debug message.")
+
+	commands = map[string]string{}
 )
+
+type warpWriter struct {
+	nm      string
+	out     io.Writer
+	buf     []byte
+	decoder mahonia.Decoder
+}
+
+func (w *warpWriter) Write(p []byte) (c int, e error) {
+	if 0 == len(w.buf) {
+		n, cdata, e := w.decoder.Translate(p, false)
+		if nil != e {
+			return 0, e
+		}
+		if n != len(p) {
+			w.buf = append(w.buf, p[n:]...)
+		}
+		os.Stdout.Write(cdata)
+		if _, e = w.out.Write(cdata); nil != e {
+			return 0, e
+		}
+		return len(p), nil
+	} else {
+		w.buf = append(w.buf, p...)
+		n, cdata, e := w.decoder.Translate(w.buf, false)
+		if nil != e {
+			return 0, e
+		}
+		if n == len(w.buf) {
+			w.buf = w.buf[0:0]
+		} else {
+			w.buf = w.buf[n:]
+		}
+		os.Stdout.Write(cdata)
+		if _, e = w.out.Write(cdata); nil != e {
+			return 0, e
+		}
+		return len(p), nil
+	}
+}
+
+func warpW(nm string, dst io.Writer) io.Writer {
+	//if *debug {
+	return &warpWriter{nm: nm, out: dst, buf: make([]byte, 0, 8), decoder: mahonia.GetCharset("GB18030").NewDecoder()}
+	//} else {
+	//	return dst
+	//}
+}
 
 type warpReader struct {
 	nm string
 	in io.Reader
 }
 
-// func init() {
-// 	executableFolder, err := osext.ExecutableFolder()
-// 	if nil != err {
-// 		panic(err)
-// 		return
-// 	}
-
-// 	out, err = os.OpenFile(executableFolder+"/log.txt", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 666)
-// 	if err != nil {
-// 		panic(err)
-// 		return
-// 	}
-// }
-
 func (w *warpReader) Read(p []byte) (int, error) {
 	c, e := w.in.Read(p)
 	if nil != e {
 		fmt.Println(e)
 	} else {
-		//out.Write(p[:c])
 		fmt.Println(w.nm)
 		os.Stdout.Write(p[:c])
 	}
@@ -176,11 +213,83 @@ func TelnetShell(ws *websocket.Conn) {
 		}
 	}()
 
-	if _, err := io.Copy(ws, warp("server:", client)); err != nil {
+	if _, err := io.Copy(ws, warp("client:", client)); err != nil {
 		logString(ws, "copy of stdout failed:"+err.Error())
 		return
 	}
-	time.Sleep(1 * time.Minute)
+}
+
+func ExecShell(ws *websocket.Conn) {
+	defer ws.Close()
+	pa := ws.Request().URL.Query().Get("exec")
+	args := make([]string, 0, 10)
+	vars := ws.Request().URL.Query()
+	for i := 0; i < 1000; i++ {
+		arguments, ok := vars["arg"+strconv.FormatInt(int64(i), 10)]
+		if !ok {
+			break
+		}
+		for _, argument := range arguments {
+			args = append(args, argument)
+		}
+	}
+
+	if c, ok := commands[pa]; ok {
+		pa = c
+	}
+	cmd := exec.Command(pa, args...)
+	// os_env := os.Environ()
+	// environments := make([]string, 0, 1+len(os_env))
+	// environments = append(environments, os_env...)
+	// environments = append(environments, "PROCMGR_ID="+os.Args[0])
+	// cmd.Env = environments
+	cmd.Stderr = warpW("server:", ws)
+	cmd.Stdout = cmd.Stderr
+	if e := cmd.Run(); nil != e {
+		io.WriteString(ws, e.Error())
+	}
+}
+
+func abs(s string) string {
+	r, e := filepath.Abs(s)
+	if nil != e {
+		return s
+	}
+	return r
+}
+
+func lookPath(executableFolder, pa string) (string, bool) {
+	for _, nm := range []string{pa, pa + ".exe", pa + ".bat", pa + ".com"} {
+		files := []string{nm,
+			filepath.Join("bin", nm),
+			filepath.Join("tools", nm),
+			filepath.Join("..", nm),
+			filepath.Join("..", "bin", nm),
+			filepath.Join("..", "tools", nm),
+			filepath.Join(executableFolder, nm),
+			filepath.Join(executableFolder, "bin", nm),
+			filepath.Join(executableFolder, "tools", nm),
+			filepath.Join(executableFolder, "..", nm),
+			filepath.Join(executableFolder, "..", "bin", nm),
+			filepath.Join(executableFolder, "..", "tools", nm)}
+		for _, file := range files {
+			if st, e := os.Stat(file); nil == e && nil != st && !st.IsDir() {
+				return abs(file), true
+			}
+		}
+	}
+	return "", false
+}
+
+func fillCommands(executableFolder string) {
+	for _, nm := range []string{"snmpget", "snmpgetnext", "snmpdf", "snmpbulkget",
+		"snmpbulkwalk", "snmpdelta", "snmpnetstat", "snmpset", "snmpstatus",
+		"snmptable", "snmptest", "snmptools", "snmptranslate", "snmptrap", "snmpusm",
+		"snmpvacm", "snmpwalk"} {
+		if pa, ok := lookPath(executableFolder, nm); ok {
+			commands[nm] = pa
+		}
+	}
 }
 
 func main() {
@@ -191,6 +300,8 @@ func main() {
 		fmt.Println(e)
 		return
 	}
+
+	fillCommands(executableFolder)
 
 	files := []string{"web-terminal",
 		filepath.Join("lib", "web-terminal"),
@@ -221,6 +332,7 @@ func main() {
 
 	http.Handle("/ssh", websocket.Handler(SSHShell))
 	http.Handle("/telnet", websocket.Handler(TelnetShell))
+	http.Handle("/cmd", websocket.Handler(ExecShell))
 	//http.Handle("/", http.FileServer(http.Dir(filepath.Join(executableFolder, "static"))))
 	http.Handle("/", http.FileServer(http.Dir(file)))
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(file))))
