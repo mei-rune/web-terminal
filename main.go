@@ -34,8 +34,16 @@ type consoleWriter struct {
 }
 
 func (w *consoleWriter) Write(p []byte) (c int, e error) {
-	fmt.Println(p)
+	os.Stdout.Write(p)
 	return w.out.Write(p)
+}
+
+func warp(dst io.Writer) io.Writer {
+	if *debug {
+		return &consoleWriter{out: dst}
+	} else {
+		return dst
+	}
 }
 
 type decodeWriter struct {
@@ -124,35 +132,15 @@ func decodeBy(charset string, dst io.Writer) io.Writer {
 	if "UTF-8" == strings.ToUpper(charset) || "UTF8" == strings.ToUpper(charset) {
 		return dst
 	}
+	cs := mahonia.GetCharset(charset)
+	if nil == cs {
+		panic("charset '" + charset + "' is not exists.")
+	}
 	//if *debug {
-	return &decodeWriter{out: dst, decoder: mahonia.GetCharset(charset).NewDecoder()}
+	return &decodeWriter{out: dst, decoder: cs.NewDecoder()}
 	//} else {
 	//	return dst
 	//}
-}
-
-type warpReader struct {
-	nm string
-	in io.Reader
-}
-
-func (w *warpReader) Read(p []byte) (int, error) {
-	c, e := w.in.Read(p)
-	if nil != e {
-		fmt.Println(e)
-	} else {
-		fmt.Println(w.nm)
-		os.Stdout.Write(p[:c])
-	}
-	return c, e
-}
-
-func warp(nm string, src io.Reader) io.Reader {
-	if *debug {
-		return &warpReader{nm: nm, in: src}
-	} else {
-		return src
-	}
 }
 
 // password implements the ClientPassword interface
@@ -220,8 +208,8 @@ func SSHShell(ws *websocket.Conn) {
 		return
 	}
 
-	session.Stdout = ws
-	session.Stderr = ws
+	session.Stdout = warp(ws)
+	session.Stderr = session.Stdout
 	session.Stdin = ws
 	if err := session.Shell(); nil != err {
 		logString(ws, "Unable to execute command:"+err.Error())
@@ -239,6 +227,14 @@ func TelnetShell(ws *websocket.Conn) {
 	if "" == port {
 		port = "23"
 	}
+	charset := ws.Request().URL.Query().Get("charset")
+	if "" == charset {
+		if "windows" == runtime.GOOS {
+			charset = "GB18030"
+		} else {
+			charset = "UTF-8"
+		}
+	}
 	//columns := toInt(ws.Request().URL.Query().Get("columns"), 80)
 	//rows := toInt(ws.Request().URL.Query().Get("rows"), 40)
 	client, err := net.Dial("tcp", hostname+":"+port)
@@ -250,13 +246,13 @@ func TelnetShell(ws *websocket.Conn) {
 		client.Close()
 	}()
 	go func() {
-		_, err := io.Copy(client, warp("client:", ws))
+		_, err := io.Copy(decodeBy(charset, warp(client)), ws)
 		if nil != err {
 			logString(nil, "copy of stdin failed:"+err.Error())
 		}
 	}()
 
-	if _, err := io.Copy(ws, warp("client:", client)); err != nil {
+	if _, err := io.Copy(decodeBy(charset, warp(ws)), client); err != nil {
 		logString(ws, "copy of stdout failed:"+err.Error())
 		return
 	}
@@ -294,7 +290,7 @@ func ExecShell(ws *websocket.Conn) {
 	// environments = append(environments, os_env...)
 	// environments = append(environments, "PROCMGR_ID="+os.Args[0])
 	// cmd.Env = environments
-	cmd.Stderr = decodeBy(charset, ws)
+	cmd.Stderr = decodeBy(charset, warp(ws))
 	cmd.Stdout = cmd.Stderr
 	if e := cmd.Run(); nil != e {
 		io.WriteString(ws, e.Error())
