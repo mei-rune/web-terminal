@@ -166,11 +166,13 @@ func SSHShell(ws *websocket.Conn) {
 	session.Stdout = ws
 	session.Stderr = ws
 	session.Stdin = ws
-	if err := session.Shell(); err != nil {
+	if err := session.Shell(); nil != err {
 		logString(ws, "Unable to execute command:"+err.Error())
 		return
 	}
-	session.Wait()
+	if err := session.Wait(); nil != err {
+		logString(ws, "Unable to execute command:"+err.Error())
+	}
 }
 
 func TelnetShell(ws *websocket.Conn) {
