@@ -5,11 +5,28 @@ var shell_commands = {
     },
     help: function() {
         this.echo("Available commands:");
-        this.echo("\tabout       information about this page");
-        this.echo("\tcontact     display contact infomation");
-        this.echo("\thelp        this help screen.");                        
+        this.echo("\tsnmpget        communicates with a network entity using SNMP GET requests.");
+        this.echo("\tsnmpgetnext    communicates with a network entity using SNMP GETNEXT requests.");
+        this.echo("\tsnmptranslate  translate MIB OID names between numeric and textual forms.");
+        this.echo("\tsnmpbulkget    communicates with a network entity using SNMP GETBULK requests.");
+        this.echo("\tsnmpwalk       retrieve a subtree of management values using SNMP GETNEXT requests.");
+        this.echo("\tsnmpbulkwalk   retrieve a subtree of management values using SNMP GETBULK requests.");
+        this.echo("\tsnmpset        communicates with a network entity using SNMP SET requests.");
+        this.echo("\tsnmptest       communicates with a network entity using SNMP requests.");
+        this.echo("\tsnmptable      retrieve an SNMP table and display it in tabular form.");
+        this.echo("\tsnmpdelta      Monitor delta differences in SNMP Counter values.");
+        this.echo("\tsnmpusm        creates and maintains SNMPv3 users on a network entity.");
+        this.echo("\tsnmpvacm       creates and maintains SNMPv3 View-based Access Control entries on a network entity.");
+        this.echo("\tsnmpstatus     retrieves a fixed set of management information from a network entity.");
+        this.echo("\tsnmpnetstat    display networking status and configuration information from a network entity via SNMP.");
+        this.echo("\tsnmpdf         display disk space usage on a network entity via SNMP.");
+        this.echo("\tsnmptrap       snmptrap, snmpinform - sends an SNMP notification to a manager.");
+        this.echo("\tping           send ICMP ECHO_REQUEST to network hosts .");
+        this.echo("\ttracert        print the route packets take to network host  .");
+        this.echo("\tabout          information about this page");
+        this.echo("\tcontact        display contact infomation");
+        this.echo("\thelp           this help screen.");                        
         this.echo("");
-        this.echo("some other basic Linux commands are available: cat cd id ls startx")
     },
     contact: function() {
         this.echo("Get in touch via:")
