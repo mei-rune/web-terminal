@@ -6,6 +6,7 @@ import (
 	"code.google.com/p/go.crypto/ssh"
 	"code.google.com/p/go.net/websocket"
 	"code.google.com/p/mahonia"
+
 	//"encoding/hex"
 	"flag"
 	"fmt"
@@ -260,7 +261,16 @@ func TelnetShell(ws *websocket.Conn) {
 
 func ExecShell(ws *websocket.Conn) {
 	defer ws.Close()
+	is_snmp_command := false
+	has_mibs_dir := false
 	pa := ws.Request().URL.Query().Get("exec")
+	if strings.HasPrefix(pa, "snmp") {
+		is_snmp_command = true
+	}
+	if c, ok := commands[pa]; ok {
+		pa = c
+	}
+
 	charset := ws.Request().URL.Query().Get("charset")
 	if "" == charset {
 		if "windows" == runtime.GOOS {
@@ -277,24 +287,35 @@ func ExecShell(ws *websocket.Conn) {
 			break
 		}
 		for _, argument := range arguments {
+			if is_snmp_command && "-M" == argument {
+				has_mibs_dir = true
+			}
 			args = append(args, argument)
 		}
 	}
-
-	if c, ok := commands[pa]; ok {
-		pa = c
+	var cmd *exec.Cmd
+	if is_snmp_command && !has_mibs_dir {
+		cmd = exec.Command(pa)
+		cmd.Args = append(cmd.Args, "-M")
+		cmd.Args = append(cmd.Args, filepath.Join(filepath.Dir(pa), "mibs"))
+		cmd.Args = append(cmd.Args, args...)
+	} else {
+		cmd = exec.Command(pa, args...)
 	}
-	cmd := exec.Command(pa, args...)
-	// os_env := os.Environ()
-	// environments := make([]string, 0, 1+len(os_env))
-	// environments = append(environments, os_env...)
-	// environments = append(environments, "PROCMGR_ID="+os.Args[0])
-	// cmd.Env = environments
+	cmd.Stdin = ws
 	cmd.Stderr = decodeBy(charset, warp(ws))
 	cmd.Stdout = cmd.Stderr
-	if e := cmd.Run(); nil != e {
-		io.WriteString(ws, e.Error())
+	fmt.Println(cmd)
+	if err := cmd.Start(); err != nil {
+		io.WriteString(ws, err.Error())
+		return
 	}
+
+	if _, err := cmd.Process.Wait(); err != nil {
+		io.WriteString(ws, err.Error())
+	}
+	ws.Close()
+	cmd.Wait()
 }
 
 func abs(s string) string {
@@ -341,6 +362,10 @@ func fillCommands(executableFolder string) {
 
 func main() {
 	flag.Parse()
+	if nil != flag.Args() && 0 != len(flag.Args()) {
+		flag.Usage()
+		return
+	}
 
 	executableFolder, e := osext.ExecutableFolder()
 	if nil != e {
