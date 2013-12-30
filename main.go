@@ -24,8 +24,9 @@ import (
 )
 
 var (
-	listen = flag.String("listen", ":37079", "the port of http")
-	debug  = flag.Bool("debug", false, "show debug message.")
+	listen   = flag.String("listen", ":37079", "the port of http")
+	debug    = flag.Bool("debug", false, "show debug message.")
+	mibs_dir = flag.String("mibs_dir", "", "set mibs directory.")
 
 	commands = map[string]string{}
 )
@@ -297,7 +298,7 @@ func ExecShell(ws *websocket.Conn) {
 	if is_snmp_command && !has_mibs_dir {
 		cmd = exec.Command(pa)
 		cmd.Args = append(cmd.Args, "-M")
-		cmd.Args = append(cmd.Args, filepath.Join(filepath.Dir(pa), "mibs"))
+		cmd.Args = append(cmd.Args, *mibs_dir)
 		cmd.Args = append(cmd.Args, args...)
 	} else {
 		cmd = exec.Command(pa, args...)
@@ -305,7 +306,6 @@ func ExecShell(ws *websocket.Conn) {
 	cmd.Stdin = ws
 	cmd.Stderr = decodeBy(charset, warp(ws))
 	cmd.Stdout = cmd.Stderr
-	fmt.Println(cmd)
 	if err := cmd.Start(); err != nil {
 		io.WriteString(ws, err.Error())
 		return
@@ -341,8 +341,9 @@ func lookPath(executableFolder, pa string) (string, bool) {
 			filepath.Join(executableFolder, "..", "bin", nm),
 			filepath.Join(executableFolder, "..", "tools", nm)}
 		for _, file := range files {
+			file = abs(file)
 			if st, e := os.Stat(file); nil == e && nil != st && !st.IsDir() {
-				return abs(file), true
+				return file, true
 			}
 		}
 	}
@@ -372,6 +373,26 @@ func main() {
 		fmt.Println(e)
 		return
 	}
+	if "" == *mibs_dir {
+		files := []string{"mibs",
+			filepath.Join("lib", "mibs"),
+			filepath.Join("tools", "mibs"),
+			filepath.Join("..", "lib", "mibs"),
+			filepath.Join("..", "tools", "mibs"),
+			filepath.Join(executableFolder, "mibs"),
+			filepath.Join(executableFolder, "tools", "mibs"),
+			filepath.Join(executableFolder, "lib", "mibs"),
+			filepath.Join(executableFolder, "..", "lib", "mibs"),
+			filepath.Join(executableFolder, "..", "tools", "mibs")}
+		for _, nm := range files {
+			nm = abs(nm)
+			if st, e := os.Stat(nm); nil == e && nil != st && st.IsDir() {
+				flag.Set("mibs_dir", nm)
+				log.Println("'mibs' directory is '" + *mibs_dir + "'")
+				break
+			}
+		}
+	}
 
 	fillCommands(executableFolder)
 
@@ -384,6 +405,7 @@ func main() {
 		filepath.Join(executableFolder, "..", "lib", "web-terminal")}
 	file := ""
 	for _, nm := range files {
+		nm = abs(nm)
 		if st, e := os.Stat(nm); nil == e && nil != st && st.IsDir() {
 			file = nm
 			break
