@@ -23,6 +23,8 @@ var shell_commands = {
         this.echo("\tsnmptrap       snmptrap, snmpinform - sends an SNMP notification to a manager.");
         this.echo("\tping           send ICMP ECHO_REQUEST to network hosts .");
         this.echo("\ttracert        print the route packets take to network host  .");
+        this.echo("\tnmap           Nmap (\"Network Mapper\") is a free and open source (license) utility for network discovery and security auditing.");
+        this.echo("\tnping          Nping is an open source tool for network packet generation, response analysis and response time measurement.");
         this.echo("\tabout          information about this page");
         this.echo("\tcontact        display contact infomation");
         this.echo("\thelp           this help screen.");                        

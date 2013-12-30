@@ -327,19 +327,23 @@ func abs(s string) string {
 }
 
 func lookPath(executableFolder, pa string) (string, bool) {
-	for _, nm := range []string{pa, pa + ".exe", pa + ".bat", pa + ".com"} {
+	for _, nm := range []string{pa + ".bat", pa + ".com", pa, pa + ".exe"} {
 		files := []string{nm,
 			filepath.Join("bin", nm),
 			filepath.Join("tools", nm),
+			filepath.Join("runtime_env", nm),
 			filepath.Join("..", nm),
 			filepath.Join("..", "bin", nm),
 			filepath.Join("..", "tools", nm),
+			filepath.Join("..", "runtime_env", nm),
 			filepath.Join(executableFolder, nm),
 			filepath.Join(executableFolder, "bin", nm),
 			filepath.Join(executableFolder, "tools", nm),
+			filepath.Join(executableFolder, "runtime_env", nm),
 			filepath.Join(executableFolder, "..", nm),
 			filepath.Join(executableFolder, "..", "bin", nm),
-			filepath.Join(executableFolder, "..", "tools", nm)}
+			filepath.Join(executableFolder, "..", "tools", nm),
+			filepath.Join(executableFolder, "..", "runtime_env", nm)}
 		for _, file := range files {
 			file = abs(file)
 			if st, e := os.Stat(file); nil == e && nil != st && !st.IsDir() {
@@ -358,6 +362,13 @@ func fillCommands(executableFolder string) {
 		if pa, ok := lookPath(executableFolder, nm); ok {
 			commands[nm] = pa
 		}
+	}
+
+	if pa, ok := lookPath(executableFolder, "nmap/nping"); ok {
+		commands["nping"] = pa
+	}
+	if pa, ok := lookPath(executableFolder, "nmap/nmap"); ok {
+		commands["nmap"] = pa
 	}
 }
 
