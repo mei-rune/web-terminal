@@ -48,7 +48,7 @@ function shell(cmd, args, term) {
     try {
         var socket = new WebSocket(target_url);
         socket.onopen = function() {
-            term.pause();
+            //term.pause();
             term.set_prompt("");
         };
         socket.onerror = function(e) {
@@ -59,7 +59,7 @@ function shell(cmd, args, term) {
         };
         socket.onclose  = function() {
             //term.destroy();
-            term.resume()
+            //term.resume()
             shell_prompt.apply(term, [term.set_prompt])
         };
     } catch(e) {
