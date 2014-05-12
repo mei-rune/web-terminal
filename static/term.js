@@ -168,7 +168,7 @@ function Terminal(options) {
     options.colors = options.colors.slice(0, -2).concat(
       Terminal._colors.slice(8, -2), options.colors.slice(-2));
   } else if (options.colors.length === 18) {
-    options.colors = options.colors.concat(
+    options.colors = options.colors.slice(0, -2).concat(
       Terminal._colors.slice(16, -2), options.colors.slice(-2));
   }
   this.colors = options.colors;
@@ -612,8 +612,8 @@ Terminal.fixIpad = function(document) {
   textarea.style.backgroundColor = 'transparent';
   textarea.style.borderStyle = 'none';
   textarea.style.outlineStyle = 'none';
-  textarea.autocapitalize='none';
-  textarea.autocorrect='off';
+  textarea.autocapitalize = 'none';
+  textarea.autocorrect = 'off';
 
   document.getElementsByTagName('body')[0].appendChild(textarea);
 
@@ -703,6 +703,7 @@ Terminal.prototype.open = function(parent) {
   this.element.className = 'terminal';
   this.element.style.outline = 'none';
   this.element.setAttribute('tabindex', 0);
+  this.element.setAttribute('spellcheck', 'false');
   this.element.style.backgroundColor = this.colors[256];
   this.element.style.color = this.colors[257];
 
@@ -2696,6 +2697,7 @@ Terminal.prototype.send = function(data) {
 };
 
 Terminal.prototype.bell = function() {
+  this.emit('bell');
   if (!this.visualBell) return;
   var self = this;
   this.element.style.borderColor = 'white';

@@ -145,13 +145,6 @@ func decodeBy(charset string, dst io.Writer) io.Writer {
 	//}
 }
 
-// password implements the ClientPassword interface
-type password string
-
-func (p password) Password(user string) (string, error) {
-	return string(p), nil
-}
-
 func toInt(s string, v int) int {
 	if value, e := strconv.ParseInt(s, 10, 0); nil == e {
 		return int(value)
@@ -181,9 +174,7 @@ func SSHShell(ws *websocket.Conn) {
 	// Dial code is taken from the ssh package example
 	config := &ssh.ClientConfig{
 		User: user,
-		Auth: []ssh.ClientAuth{
-			ssh.ClientAuthPassword(password(pwd)),
-		},
+		Auth: []ssh.AuthMethod{ssh.Password(pwd)},
 	}
 	client, err := ssh.Dial("tcp", hostname+":"+port, config)
 	if err != nil {

@@ -102,5 +102,12 @@ jQuery(document).ready(function($) {
             return false;
         },
         tabcompletion: true
+        //keypress: function(e, term) {
+		//	if(e.ctrlKey) {
+		//		alert("Ctrl+C was pressed!!");
+		//	}
+        //    // prevent loosing focus
+        //    return true;
+        //}
     });
 });
