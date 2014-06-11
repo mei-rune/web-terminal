@@ -29,6 +29,8 @@ var (
 	mibs_dir = flag.String("mibs_dir", "", "set mibs directory.")
 
 	commands = map[string]string{}
+
+	logs_dir = ""
 )
 
 type consoleReader struct {
@@ -216,7 +218,7 @@ func SSHShell(ws *websocket.Conn) {
 
 	var combinedOut io.Writer = ws
 	if *debug {
-		f, err = os.OpenFile(hostname+".dump_ssh.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0)
+		f, err = os.OpenFile(logs_dir+hostname+".dump_ssh.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0)
 		if nil == err {
 			combinedOut = io.MultiWriter(f, ws)
 		} else {
@@ -269,7 +271,7 @@ func TelnetShell(ws *websocket.Conn) {
 
 	if *debug {
 		var err error
-		f, err = os.OpenFile(hostname+".dump_telnet.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0)
+		f, err = os.OpenFile(logs_dir+hostname+".dump_telnet.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0)
 		if nil != err {
 			f = nil
 		}
@@ -412,6 +414,20 @@ func main() {
 		fmt.Println(e)
 		return
 	}
+
+	files := []string{"logs",
+		filepath.Join("..", "logs"),
+		filepath.Join(executableFolder, "logs"),
+		filepath.Join(executableFolder, "..", "logs")}
+	for _, nm := range files {
+		nm = abs(nm)
+		if st, e := os.Stat(nm); nil == e && nil != st && st.IsDir() {
+			logs_dir = nm + "/"
+			log.Println("'logs' directory is '" + logs_dir + "'")
+			break
+		}
+	}
+
 	if "" == *mibs_dir {
 		files := []string{"mibs",
 			filepath.Join("lib", "mibs"),
