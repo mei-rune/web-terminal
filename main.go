@@ -31,21 +31,27 @@ var (
 	commands = map[string]string{}
 )
 
-type consoleWriter struct {
+type consoleReader struct {
+	dst io.ReadCloser
 	out io.Writer
 }
 
-func (w *consoleWriter) Write(p []byte) (c int, e error) {
-	os.Stdout.Write(p)
-	return w.out.Write(p)
+func (w *consoleReader) Read(p []byte) (n int, err error) {
+	n, err = w.dst.Read(p)
+	if n > 0 {
+		w.out.Write(p[:n])
+	}
+	return
+}
+func (w *consoleReader) Close() error {
+	return w.dst.Close()
 }
 
-func warp(dst io.Writer) io.Writer {
-	if *debug {
-		return &consoleWriter{out: dst}
-	} else {
+func warp(dst io.ReadCloser, dump io.Writer) io.ReadCloser {
+	if nil == dump {
 		return dst
 	}
+	return &consoleReader{out: dump, dst: dst}
 }
 
 type decodeWriter struct {
@@ -160,7 +166,14 @@ func logString(ws io.Writer, msg string) {
 }
 
 func SSHShell(ws *websocket.Conn) {
-	defer ws.Close()
+	var f io.WriteCloser
+	defer func() {
+		ws.Close()
+		if nil != f {
+			f.Close()
+		}
+	}()
+
 	hostname := ws.Request().URL.Query().Get("hostname")
 	port := ws.Request().URL.Query().Get("port")
 	if "" == port {
@@ -201,9 +214,19 @@ func SSHShell(ws *websocket.Conn) {
 		return
 	}
 
-	session.Stdout = warp(ws)
-	session.Stderr = session.Stdout
-	session.Stdin = ws
+	var combinedOut io.Writer = ws
+	if *debug {
+		f, err = os.OpenFile(hostname+".dump_ssh.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0)
+		if nil == err {
+			combinedOut = io.MultiWriter(f, ws)
+		} else {
+			fmt.Println(hostname+".dump_ssh.txt is failed,", err)
+		}
+	}
+
+	session.Stdout = combinedOut
+	session.Stderr = combinedOut
+	session.Stdin = warp(ws, f)
 	if err := session.Shell(); nil != err {
 		logString(ws, "Unable to execute command:"+err.Error())
 		return
@@ -230,6 +253,8 @@ func TelnetShell(ws *websocket.Conn) {
 	}
 	//columns := toInt(ws.Request().URL.Query().Get("columns"), 80)
 	//rows := toInt(ws.Request().URL.Query().Get("rows"), 40)
+
+	var f io.WriteCloser
 	client, err := net.Dial("tcp", hostname+":"+port)
 	if nil != err {
 		logString(ws, "Failed to dial: "+err.Error())
@@ -237,15 +262,27 @@ func TelnetShell(ws *websocket.Conn) {
 	}
 	defer func() {
 		client.Close()
+		if nil != f {
+			f.Close()
+		}
 	}()
+
+	if *debug {
+		var err error
+		f, err = os.OpenFile(hostname+".dump_telnet.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0)
+		if nil != err {
+			f = nil
+		}
+	}
+
 	go func() {
-		_, err := io.Copy(decodeBy(charset, warp(client)), ws)
+		_, err := io.Copy(decodeBy(charset, client), warp(ws, f))
 		if nil != err {
 			logString(nil, "copy of stdin failed:"+err.Error())
 		}
 	}()
 
-	if _, err := io.Copy(decodeBy(charset, warp(ws)), client); err != nil {
+	if _, err := io.Copy(decodeBy(charset, ws), warp(client, f)); err != nil {
 		logString(ws, "copy of stdout failed:"+err.Error())
 		return
 	}
@@ -295,7 +332,7 @@ func ExecShell(ws *websocket.Conn) {
 		cmd = exec.Command(pa, args...)
 	}
 	cmd.Stdin = ws
-	cmd.Stderr = decodeBy(charset, warp(ws))
+	cmd.Stderr = decodeBy(charset, ws)
 	cmd.Stdout = cmd.Stderr
 	if err := cmd.Start(); err != nil {
 		io.WriteString(ws, err.Error())
