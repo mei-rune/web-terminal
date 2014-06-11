@@ -429,7 +429,7 @@ func main() {
 	}
 
 	if "" == *mibs_dir {
-		files := []string{"mibs",
+		files = []string{"mibs",
 			filepath.Join("lib", "mibs"),
 			filepath.Join("tools", "mibs"),
 			filepath.Join("..", "lib", "mibs"),
@@ -451,7 +451,7 @@ func main() {
 
 	fillCommands(executableFolder)
 
-	files := []string{"web-terminal",
+	files = []string{"web-terminal",
 		filepath.Join("lib", "web-terminal"),
 		filepath.Join("..", "lib", "web-terminal"),
 		filepath.Join(executableFolder, "static"),
