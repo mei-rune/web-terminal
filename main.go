@@ -168,11 +168,14 @@ func logString(ws io.Writer, msg string) {
 }
 
 func SSHShell(ws *websocket.Conn) {
-	var f io.WriteCloser
+	var dump_out, dump_in io.WriteCloser
 	defer func() {
 		ws.Close()
-		if nil != f {
-			f.Close()
+		if nil != dump_out {
+			dump_out.Close()
+		}
+		if nil != dump_in {
+			dump_in.Close()
 		}
 	}()
 
@@ -218,17 +221,20 @@ func SSHShell(ws *websocket.Conn) {
 
 	var combinedOut io.Writer = ws
 	if *debug {
-		f, err = os.OpenFile(logs_dir+hostname+".dump_ssh.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0)
+		dump_out, err = os.OpenFile(logs_dir+hostname+".dump_ssh_out.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0)
 		if nil == err {
-			combinedOut = io.MultiWriter(f, ws)
-		} else {
-			fmt.Println(hostname+".dump_ssh.txt is failed,", err)
+			combinedOut = io.MultiWriter(dump_out, ws)
+		}
+
+		dump_in, err = os.OpenFile(logs_dir+hostname+".dump_ssh_in.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0)
+		if nil != err {
+			dump_in = nil
 		}
 	}
 
 	session.Stdout = combinedOut
 	session.Stderr = combinedOut
-	session.Stdin = warp(ws, f)
+	session.Stdin = warp(ws, dump_in)
 	if err := session.Shell(); nil != err {
 		logString(ws, "Unable to execute command:"+err.Error())
 		return
@@ -256,7 +262,8 @@ func TelnetShell(ws *websocket.Conn) {
 	//columns := toInt(ws.Request().URL.Query().Get("columns"), 80)
 	//rows := toInt(ws.Request().URL.Query().Get("rows"), 40)
 
-	var f io.WriteCloser
+	var dump_out io.WriteCloser
+	var dump_in io.WriteCloser
 	client, err := net.Dial("tcp", hostname+":"+port)
 	if nil != err {
 		logString(ws, "Failed to dial: "+err.Error())
@@ -264,27 +271,34 @@ func TelnetShell(ws *websocket.Conn) {
 	}
 	defer func() {
 		client.Close()
-		if nil != f {
-			f.Close()
+		if nil != dump_out {
+			dump_out.Close()
+		}
+		if nil != dump_in {
+			dump_in.Close()
 		}
 	}()
 
 	if *debug {
 		var err error
-		f, err = os.OpenFile(logs_dir+hostname+".dump_telnet.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0)
+		dump_out, err = os.OpenFile(logs_dir+hostname+".dump_telnet_out.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0)
 		if nil != err {
-			f = nil
+			dump_out = nil
+		}
+		dump_in, err = os.OpenFile(logs_dir+hostname+".dump_telnet_in.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0)
+		if nil != err {
+			dump_in = nil
 		}
 	}
 
 	go func() {
-		_, err := io.Copy(decodeBy(charset, client), warp(ws, f))
+		_, err := io.Copy(decodeBy(charset, client), warp(ws, dump_out))
 		if nil != err {
 			logString(nil, "copy of stdin failed:"+err.Error())
 		}
 	}()
 
-	if _, err := io.Copy(decodeBy(charset, ws), warp(client, f)); err != nil {
+	if _, err := io.Copy(decodeBy(charset, ws), warp(client, dump_in)); err != nil {
 		logString(ws, "copy of stdout failed:"+err.Error())
 		return
 	}
