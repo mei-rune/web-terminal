@@ -2,6 +2,7 @@ package main
 
 import (
 	"bitbucket.org/kardianos/osext"
+	"bufio"
 	"bytes"
 	"code.google.com/p/go.crypto/ssh"
 	"code.google.com/p/go.net/websocket"
@@ -264,6 +265,7 @@ func TelnetShell(ws *websocket.Conn) {
 
 	var dump_out io.WriteCloser
 	var dump_in io.WriteCloser
+
 	client, err := net.Dial("tcp", hostname+":"+port)
 	if nil != err {
 		logString(ws, "Failed to dial: "+err.Error())
@@ -291,6 +293,15 @@ func TelnetShell(ws *websocket.Conn) {
 		}
 	}
 
+	conn := &Conn{
+		Conn: client,
+		r:    bufio.NewReaderSize(warp(client, dump_in), 256),
+	}
+
+	columns := toInt(ws.Request().URL.Query().Get("columns"), 80)
+	rows := toInt(ws.Request().URL.Query().Get("rows"), 40)
+	conn.setWindowSize(byte(rows), byte(columns))
+
 	go func() {
 		_, err := io.Copy(decodeBy(charset, client), warp(ws, dump_out))
 		if nil != err {
@@ -298,7 +309,31 @@ func TelnetShell(ws *websocket.Conn) {
 		}
 	}()
 
-	if _, err := io.Copy(decodeBy(charset, ws), warp(client, dump_in)); err != nil {
+	if _, err := io.Copy(decodeBy(charset, ws), conn); err != nil {
+		logString(ws, "copy of stdout failed:"+err.Error())
+		return
+	}
+}
+
+func Replay(ws *websocket.Conn) {
+	defer ws.Close()
+	file_name := ws.Request().URL.Query().Get("file")
+	charset := ws.Request().URL.Query().Get("charset")
+	if "" == charset {
+		if "windows" == runtime.GOOS {
+			charset = "GB18030"
+		} else {
+			charset = "UTF-8"
+		}
+	}
+	dump_out, err := os.Open(file_name)
+	if nil != err {
+		logString(ws, "open '"+file_name+"' failed:"+err.Error())
+		return
+	}
+	defer dump_out.Close()
+
+	if _, err := io.Copy(decodeBy(charset, ws), dump_out); err != nil {
 		logString(ws, "copy of stdout failed:"+err.Error())
 		return
 	}
@@ -493,6 +528,7 @@ func main() {
 		return
 	}
 
+	http.Handle("/replay", websocket.Handler(Replay))
 	http.Handle("/ssh", websocket.Handler(SSHShell))
 	http.Handle("/telnet", websocket.Handler(TelnetShell))
 	http.Handle("/cmd", websocket.Handler(ExecShell))
