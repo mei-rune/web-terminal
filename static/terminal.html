@@ -42,13 +42,10 @@
 
             var protocol=getQueryStringByName("protocol")
             var hostname=getQueryStringByName("hostname")
+            var file=getQueryStringByName("file")
             var port=getQueryStringByName("port")
 
             window.addEventListener('load', function() {
-                if (undefined == hostname || null == hostname || "" == hostname) {
-                    alert("hostname is empty.")
-                    return
-                }
                 if (undefined == protocol || null == protocol || "" == protocol) {
                   protocol= "ssh"
                   if (undefined == port || null == port || "" == port) {
@@ -64,10 +61,25 @@
                   }
                 }
 
+                if("replay" == protocol) {
+                    if (undefined == file || null == file || "" == file) {
+                        alert("file is empty.")
+                        return
+                    }
+                } else {
+                    if (undefined == hostname || null == hostname || "" == hostname) {
+                        alert("hostname is empty.")
+                        return
+                    }
+                }
+
                 // var parts = document.location.pathname.split('/')
                 //   , base = parts.slice(0, parts.length - 1).join('/') + '/'
                 //   , resource = base.substring(1) + 'ssh';
                 var target_url = "ws://" + document.location.host +"/"+protocol+"?hostname="+hostname+"&port="+port+"&user=mfk&password=mfk&columns=160&rows=44"
+                if("replay" == protocol) {
+                    target_url = "ws://" + document.location.host +"/"+protocol+"?file="+file+"&user=mfk&password=mfk&columns=160&rows=44"
+                }
                 console.log(target_url)
                 var socket = new WebSocket(target_url);
                 socket.onopen = function() {
