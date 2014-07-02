@@ -187,8 +187,8 @@ func SSHShell(ws *websocket.Conn) {
 	}
 	user := ws.Request().URL.Query().Get("user")
 	pwd := ws.Request().URL.Query().Get("password")
-	columns := toInt(ws.Request().URL.Query().Get("columns"), 80)
-	rows := toInt(ws.Request().URL.Query().Get("rows"), 40)
+	columns := toInt(ws.Request().URL.Query().Get("columns"), 120)
+	rows := toInt(ws.Request().URL.Query().Get("rows"), 80)
 
 	// Dial code is taken from the ssh package example
 	config := &ssh.ClientConfig{
@@ -215,7 +215,7 @@ func SSHShell(ws *websocket.Conn) {
 		ssh.TTY_OP_OSPEED: 14400, // output speed = 14.4kbaud
 	}
 	// Request pseudo terminal
-	if err = session.RequestPty("xterm", columns, rows, modes); err != nil {
+	if err = session.RequestPty("xterm", rows, columns, modes); err != nil {
 		logString(ws, "request for pseudo terminal failed:"+err.Error())
 		return
 	}
