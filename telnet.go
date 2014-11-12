@@ -3,7 +3,10 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"fmt"
+	"io"
 	"net"
+	"sync/atomic"
 	"time"
 	"unicode"
 )
@@ -91,8 +94,10 @@ const (
 // Telnet specific methods.
 type Conn struct {
 	net.Conn
-	r *bufio.Reader
+	r      *bufio.Reader
+	ticker *time.Ticker
 
+	is_closed     int32
 	unixWriteMode bool
 
 	cliSuppressGoAhead bool
@@ -102,10 +107,17 @@ type Conn struct {
 }
 
 func NewConn(conn net.Conn) (*Conn, error) {
+	return NewConnWithRead(conn, conn)
+}
+
+func NewConnWithRead(conn net.Conn, rd io.Reader) (*Conn, error) {
 	c := Conn{
 		Conn: conn,
-		r:    bufio.NewReaderSize(conn, 256),
+		r:    bufio.NewReaderSize(rd, 256),
 	}
+	c.is_closed = 0
+	c.ticker = time.NewTicker(1 * time.Second)
+	go c.run()
 	return &c, nil
 }
 
@@ -123,6 +135,38 @@ func DialTimeout(network, addr string, timeout time.Duration) (*Conn, error) {
 		return nil, err
 	}
 	return NewConn(conn)
+}
+
+func (c *Conn) run() {
+	defer func() {
+		if o := recover(); nil != o {
+			fmt.Println(o)
+		}
+		c.ticker.Stop()
+	}()
+
+	for 0 == atomic.LoadInt32(&c.is_closed) {
+		_, ok := <-c.ticker.C
+		if !ok {
+			break
+		}
+		if e := c.noop(); nil != e {
+			break
+		}
+	}
+}
+
+func (c *Conn) noop() error {
+	_, e := c.Write([]byte{cmdNOP})
+	return e
+}
+
+func (c *Conn) Close() error {
+	if !atomic.CompareAndSwapInt32(&c.is_closed, 0, 1) {
+		return nil
+	}
+
+	return c.Conn.Close()
 }
 
 // SetUnixWriteMode sets flag that applies only to the Write method.

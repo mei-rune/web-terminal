@@ -1,9 +1,9 @@
 package main
 
 import (
-	"bitbucket.org/kardianos/osext"
-	"bufio"
 	"bytes"
+
+	"bitbucket.org/kardianos/osext"
 	"code.google.com/p/go.crypto/ssh"
 	"code.google.com/p/go.net/websocket"
 	"code.google.com/p/mahonia"
@@ -26,7 +26,7 @@ import (
 
 var (
 	listen   = flag.String("listen", ":37079", "the port of http")
-	debug    = flag.Bool("debug", false, "show debug message.")
+	is_debug = flag.Bool("debug", false, "show debug message.")
 	mibs_dir = flag.String("mibs_dir", "", "set mibs directory.")
 
 	commands = map[string]string{}
@@ -189,6 +189,10 @@ func SSHShell(ws *websocket.Conn) {
 	pwd := ws.Request().URL.Query().Get("password")
 	columns := toInt(ws.Request().URL.Query().Get("columns"), 120)
 	rows := toInt(ws.Request().URL.Query().Get("rows"), 80)
+	debug := *is_debug
+	if "true" == strings.ToLower(ws.Request().URL.Query().Get("debug")) {
+		debug = true
+	}
 
 	// Dial code is taken from the ssh package example
 	config := &ssh.ClientConfig{
@@ -221,7 +225,7 @@ func SSHShell(ws *websocket.Conn) {
 	}
 
 	var combinedOut io.Writer = ws
-	if *debug {
+	if debug {
 		dump_out, err = os.OpenFile(logs_dir+hostname+".dump_ssh_out.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0)
 		if nil == err {
 			combinedOut = io.MultiWriter(dump_out, ws)
@@ -281,7 +285,12 @@ func TelnetShell(ws *websocket.Conn) {
 		}
 	}()
 
-	if *debug {
+	debug := *is_debug
+	if "true" == strings.ToLower(ws.Request().URL.Query().Get("debug")) {
+		debug = true
+	}
+
+	if debug {
 		var err error
 		dump_out, err = os.OpenFile(logs_dir+hostname+".dump_telnet_out.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0)
 		if nil != err {
@@ -293,11 +302,11 @@ func TelnetShell(ws *websocket.Conn) {
 		}
 	}
 
-	conn := &Conn{
-		Conn: client,
-		r:    bufio.NewReaderSize(warp(client, dump_in), 256),
+	conn, e := NewConnWithRead(client, warp(client, dump_in))
+	if nil != e {
+		logString(nil, "failed to create connection: "+e.Error())
+		return
 	}
-
 	columns := toInt(ws.Request().URL.Query().Get("columns"), 80)
 	rows := toInt(ws.Request().URL.Query().Get("rows"), 40)
 	conn.setWindowSize(byte(rows), byte(columns))
