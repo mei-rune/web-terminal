@@ -249,6 +249,88 @@ func SSHShell(ws *websocket.Conn) {
 	}
 }
 
+func SSHExec(ws *websocket.Conn) {
+	var dump_out, dump_in io.WriteCloser
+	defer func() {
+		ws.Close()
+		if nil != dump_out {
+			dump_out.Close()
+		}
+		if nil != dump_in {
+			dump_in.Close()
+		}
+	}()
+
+	hostname := ws.Request().URL.Query().Get("hostname")
+	port := ws.Request().URL.Query().Get("port")
+	if "" == port {
+		port = "22"
+	}
+	user := ws.Request().URL.Query().Get("user")
+	pwd := ws.Request().URL.Query().Get("password")
+	debug := *is_debug
+	if "true" == strings.ToLower(ws.Request().URL.Query().Get("debug")) {
+		debug = true
+	}
+
+	cmd := ws.Request().URL.Query().Get("cmd")
+	cmd_alias := ws.Request().URL.Query().Get("dump_file")
+	if "" == cmd_alias {
+		cmd_alias = strings.Replace(cmd, " ", "_", -1)
+	}
+
+	// Dial code is taken from the ssh package example
+	config := &ssh.ClientConfig{
+		User: user,
+		Auth: []ssh.AuthMethod{ssh.Password(pwd)},
+	}
+	client, err := ssh.Dial("tcp", hostname+":"+port, config)
+	if err != nil {
+		logString(ws, "Failed to dial: "+err.Error())
+		return
+	}
+
+	session, err := client.NewSession()
+	if err != nil {
+		logString(ws, "Failed to create session: "+err.Error())
+		return
+	}
+	defer session.Close()
+
+	var combinedOut io.Writer = ws
+	if debug {
+		dump_out, err = os.OpenFile(logs_dir+hostname+"_"+cmd_alias+".dump_ssh_out.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0)
+		if nil == err {
+			fmt.Println("log to file", logs_dir+hostname+"_"+cmd_alias+".dump_ssh_out.txt")
+			combinedOut = io.MultiWriter(dump_out, ws)
+		} else {
+			fmt.Println("failed to open log file,", err)
+		}
+
+		dump_in, err = os.OpenFile(logs_dir+hostname+"_"+cmd_alias+".dump_ssh_in.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0)
+		if nil != err {
+			dump_in = nil
+			fmt.Println("failed to open log file,", err)
+		} else {
+			fmt.Println("log to file", logs_dir+hostname+"_"+cmd_alias+".dump_ssh_in.txt")
+		}
+	}
+
+	session.Stdout = combinedOut
+	session.Stderr = combinedOut
+	session.Stdin = warp(ws, dump_in)
+
+	if err := session.Start(cmd); nil != err {
+		logString(combinedOut, "Unable to execute command:"+err.Error())
+		return
+	}
+	if err := session.Wait(); nil != err {
+		logString(combinedOut, "Unable to execute command:"+err.Error())
+		return
+	}
+	fmt.Println("exec ok")
+}
+
 func TelnetShell(ws *websocket.Conn) {
 	defer ws.Close()
 	hostname := ws.Request().URL.Query().Get("hostname")
@@ -541,6 +623,8 @@ func main() {
 	http.Handle("/ssh", websocket.Handler(SSHShell))
 	http.Handle("/telnet", websocket.Handler(TelnetShell))
 	http.Handle("/cmd", websocket.Handler(ExecShell))
+	http.Handle("/ssh_exec", websocket.Handler(SSHExec))
+
 	//http.Handle("/", http.FileServer(http.Dir(filepath.Join(executableFolder, "static"))))
 	http.Handle("/", http.FileServer(http.Dir(file)))
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(file))))

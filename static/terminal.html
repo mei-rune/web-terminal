@@ -44,6 +44,8 @@
             var hostname=getQueryStringByName("hostname")
             var file=getQueryStringByName("file")
             var port=getQueryStringByName("port")
+            var cmd=getQueryStringByName("cmd")
+            var is_debug=getQueryStringByName("debug")
 
             window.addEventListener('load', function() {
                 if (undefined == protocol || null == protocol || "" == protocol) {
@@ -76,9 +78,11 @@
                 // var parts = document.location.pathname.split('/')
                 //   , base = parts.slice(0, parts.length - 1).join('/') + '/'
                 //   , resource = base.substring(1) + 'ssh';
-                var target_url = "ws://" + document.location.host +"/"+protocol+"?hostname="+hostname+"&port="+port+"&user=mfk&password=mfk&columns=160&rows=44"
+                var target_url = "ws://" + document.location.host +"/"+protocol+"?hostname="+hostname+"&port="+port+"&user=mfk&password=mfk&columns=160&rows=44&debug="+is_debug
                 if("replay" == protocol) {
                     target_url = "ws://" + document.location.host +"/"+protocol+"?file="+file+"&user=mfk&password=mfk&columns=160&rows=44"
+                } else if("ssh_exec" == protocol) {
+                    target_url = "ws://" + document.location.host +"/"+protocol+"?dump_file="+file+"&hostname="+hostname+"&port="+port+"&user=mfk&password=mfk&columns=160&rows=44&cmd="+cmd+"&debug="+is_debug
                 }
                 console.log(target_url)
                 var socket = new WebSocket(target_url);
