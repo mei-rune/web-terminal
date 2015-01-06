@@ -4,9 +4,9 @@ import (
 	"bytes"
 
 	"bitbucket.org/kardianos/osext"
-	"code.google.com/p/go.crypto/ssh"
-	"code.google.com/p/go.net/websocket"
 	"code.google.com/p/mahonia"
+	"golang.org/x/crypto/ssh"
+	"golang.org/x/net/websocket"
 
 	//"encoding/hex"
 	"flag"
