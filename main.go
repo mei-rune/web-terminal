@@ -3,8 +3,8 @@ package main
 import (
 	"bytes"
 
-	"bitbucket.org/kardianos/osext"
 	"code.google.com/p/mahonia"
+	"github.com/kardianos/osext"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/net/websocket"
 
