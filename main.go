@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"time"
 
 	"code.google.com/p/mahonia"
 	"github.com/kardianos/osext"
@@ -22,6 +23,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+
+	"github.com/fd/go-shellwords/shellwords"
 )
 
 var (
@@ -434,7 +437,10 @@ func ExecShell(ws *websocket.Conn) {
 	defer ws.Close()
 	is_snmp_command := false
 	has_mibs_dir := false
-	pa := ws.Request().URL.Query().Get("exec")
+
+	query_params := ws.Request().URL.Query()
+
+	pa := query_params.Get("exec")
 	if strings.HasPrefix(pa, "snmp") {
 		is_snmp_command = true
 	}
@@ -442,7 +448,7 @@ func ExecShell(ws *websocket.Conn) {
 		pa = c
 	}
 
-	charset := ws.Request().URL.Query().Get("charset")
+	charset := query_params.Get("charset")
 	if "" == charset {
 		if "windows" == runtime.GOOS {
 			charset = "GB18030"
@@ -451,9 +457,8 @@ func ExecShell(ws *websocket.Conn) {
 		}
 	}
 	args := make([]string, 0, 10)
-	vars := ws.Request().URL.Query()
 	for i := 0; i < 1000; i++ {
-		arguments, ok := vars["arg"+strconv.FormatInt(int64(i), 10)]
+		arguments, ok := query_params["arg"+strconv.FormatInt(int64(i), 10)]
 		if !ok {
 			break
 		}
@@ -464,6 +469,14 @@ func ExecShell(ws *websocket.Conn) {
 			args = append(args, argument)
 		}
 	}
+
+	timeout := 10 * time.Minute
+	if to := query_params.Get("timeout"); "" != to {
+		if t, e := time.ParseDuration(to); nil == e {
+			timeout = t
+		}
+	}
+
 	var cmd *exec.Cmd
 	if is_snmp_command && !has_mibs_dir {
 		cmd = exec.Command(pa)
@@ -473,6 +486,10 @@ func ExecShell(ws *websocket.Conn) {
 	} else {
 		cmd = exec.Command(pa, args...)
 	}
+
+	if wd := query_params.Get("wd"); "" != wd {
+		cmd.Dir = wd
+	}
 	cmd.Stdin = ws
 	cmd.Stderr = decodeBy(charset, ws)
 	cmd.Stdout = cmd.Stderr
@@ -480,10 +497,93 @@ func ExecShell(ws *websocket.Conn) {
 		io.WriteString(ws, err.Error())
 		return
 	}
+	timer := time.AfterFunc(timeout, func() {
+		defer recover()
+		cmd.Process.Kill()
+	})
 
 	if _, err := cmd.Process.Wait(); err != nil {
 		io.WriteString(ws, err.Error())
 	}
+	timer.Stop()
+	ws.Close()
+	cmd.Wait()
+}
+
+func ExecShell2(ws *websocket.Conn) {
+	defer ws.Close()
+	is_snmp_command := false
+	has_mibs_dir := false
+
+	query_params := ws.Request().URL.Query()
+
+	pa := query_params.Get("exec")
+	if strings.HasPrefix(pa, "snmp") {
+		is_snmp_command = true
+	}
+	if c, ok := commands[pa]; ok {
+		pa = c
+	}
+
+	charset := query_params.Get("charset")
+	if "" == charset {
+		if "windows" == runtime.GOOS {
+			charset = "GB18030"
+		} else {
+			charset = "UTF-8"
+		}
+	}
+
+	ss, e := shellwords.Split(pa)
+	if nil != e {
+		io.WriteString(ws, "命令格式不正确：")
+		io.WriteString(ws, e.Error())
+		return
+	}
+	pa = ss[0]
+	args := ss[1:]
+	for _, argument := range args {
+		if is_snmp_command && "-M" == argument {
+			has_mibs_dir = true
+		}
+	}
+
+	timeout := 10 * time.Minute
+	if to := query_params.Get("timeout"); "" != to {
+		if t, e := time.ParseDuration(to); nil == e {
+			timeout = t
+		}
+	}
+
+	var cmd *exec.Cmd
+	if is_snmp_command && !has_mibs_dir {
+		cmd = exec.Command(pa)
+		cmd.Args = append(cmd.Args, "-M")
+		cmd.Args = append(cmd.Args, *mibs_dir)
+		cmd.Args = append(cmd.Args, args...)
+	} else {
+		cmd = exec.Command(pa, args...)
+	}
+
+	if wd := query_params.Get("wd"); "" != wd {
+		cmd.Dir = wd
+	}
+	cmd.Stdin = ws
+	cmd.Stderr = decodeBy(charset, ws)
+	cmd.Stdout = cmd.Stderr
+	if err := cmd.Start(); err != nil {
+		io.WriteString(ws, err.Error())
+		return
+	}
+	timer := time.AfterFunc(timeout, func() {
+		defer recover()
+		cmd.Process.Kill()
+	})
+
+	if _, err := cmd.Process.Wait(); err != nil {
+		io.WriteString(ws, err.Error())
+	}
+	timer.Stop()
 	ws.Close()
 	cmd.Wait()
 }
@@ -623,6 +723,7 @@ func main() {
 	http.Handle("/ssh", websocket.Handler(SSHShell))
 	http.Handle("/telnet", websocket.Handler(TelnetShell))
 	http.Handle("/cmd", websocket.Handler(ExecShell))
+	http.Handle("/cmd2", websocket.Handler(ExecShell2))
 	http.Handle("/ssh_exec", websocket.Handler(SSHExec))
 
 	//http.Handle("/", http.FileServer(http.Dir(filepath.Join(executableFolder, "static"))))
