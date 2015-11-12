@@ -157,6 +157,74 @@ func decodeBy(charset string, dst io.Writer) io.Writer {
 	//}
 }
 
+type matchWriter struct {
+	out        io.Writer
+	excepted   []byte
+	buf        bytes.Buffer
+	cb         func()
+	is_matched bool
+}
+
+func (w *matchWriter) match(p []byte) {
+	if len(p) > len(w.excepted) {
+
+		fmt.Println("===================")
+		fmt.Println(string(p))
+		if bytes.Contains(p, w.excepted) {
+			w.is_matched = true
+			w.buf.Reset()
+			w.cb()
+			return
+		}
+		w.buf.Write(p[:len(w.excepted)-1])
+
+		fmt.Println("===================")
+		fmt.Println(w.buf.String())
+		if bytes.Contains(w.buf.Bytes(), w.excepted) {
+			w.is_matched = true
+			w.buf.Reset()
+			w.cb()
+			return
+		}
+		w.buf.Reset()
+		w.buf.Write(p[len(p)-len(w.excepted):])
+		return
+	}
+	w.buf.Write(p)
+	if w.buf.Len() <= len(w.excepted) {
+		return
+	}
+
+	fmt.Println("===================")
+	fmt.Println(w.buf.String())
+	if bytes.Contains(w.buf.Bytes(), w.excepted) {
+		w.is_matched = true
+		w.buf.Reset()
+		w.cb()
+		return
+	}
+
+	reserved := w.buf.Bytes()[w.buf.Len()-len(w.excepted):]
+	copy(w.buf.Bytes(), reserved)
+	w.buf.Truncate(len(reserved))
+}
+
+func (w *matchWriter) Write(p []byte) (c int, e error) {
+	c, e = w.out.Write(p)
+	if !w.is_matched {
+		w.match(p)
+	}
+	return
+}
+
+func matchBy(dst io.Writer, excepted string, cb func()) io.Writer {
+	return &matchWriter{
+		out:      dst,
+		excepted: []byte(excepted),
+		cb:       cb,
+	}
+}
+
 func toInt(s string, v int) int {
 	if value, e := strconv.ParseInt(s, 10, 0); nil == e {
 		return int(value)
@@ -477,6 +545,14 @@ func ExecShell(ws *websocket.Conn) {
 		}
 	}
 
+	is_connection_abandoned := false
+	var output io.Writer = decodeBy(charset, ws)
+	if pp := strings.ToLower(pa); strings.HasSuffix(pp, "plink.exe") || strings.HasSuffix(pp, "plink") {
+		output = matchBy(output, "Connection abandoned.", func() {
+			is_connection_abandoned = true
+		})
+	}
+
 	var cmd *exec.Cmd
 	if is_snmp_command && !has_mibs_dir {
 		cmd = exec.Command(pa)
@@ -491,23 +567,52 @@ func ExecShell(ws *websocket.Conn) {
 		cmd.Dir = wd
 	}
 	cmd.Stdin = ws
-	cmd.Stderr = decodeBy(charset, ws)
-	cmd.Stdout = cmd.Stderr
+	cmd.Stderr = output
+	cmd.Stdout = output
 	if err := cmd.Start(); err != nil {
 		io.WriteString(ws, err.Error())
 		return
 	}
+
 	timer := time.AfterFunc(timeout, func() {
 		defer recover()
 		cmd.Process.Kill()
 	})
-
-	if _, err := cmd.Process.Wait(); err != nil {
+	if err := cmd.Wait(); err != nil {
 		io.WriteString(ws, err.Error())
 	}
 	timer.Stop()
 	ws.Close()
-	cmd.Wait()
+
+	if is_connection_abandoned {
+		args = removeBatchOption(args)
+		var cmd = exec.Command(pa, args...)
+		if wd := query_params.Get("wd"); "" != wd {
+			cmd.Dir = wd
+		}
+
+		timer := time.AfterFunc(1*time.Minute, func() {
+			defer recover()
+			cmd.Process.Kill()
+		})
+		cmd.Stdin = strings.NewReader("y\ny\ny\ny\ny\ny\ny\ny\n")
+		cmd.Run()
+		timer.Stop()
+	}
+}
+
+func removeBatchOption(args []string) []string {
+	offset := 0
+	for idx, s := range args {
+		if strings.ToLower(s) == "-batch" {
+			continue
+		}
+		if offset != idx {
+			args[offset] = s
+		}
+		offset += 1
+	}
+	return args[:offset]
 }
 
 func ExecShell2(ws *websocket.Conn) {
@@ -555,6 +660,14 @@ func ExecShell2(ws *websocket.Conn) {
 		}
 	}
 
+	is_connection_abandoned := false
+	var output io.Writer = decodeBy(charset, ws)
+	if pp := strings.ToLower(pa); strings.HasSuffix(pp, "plink.exe") || strings.HasSuffix(pp, "plink") {
+		output = matchBy(output, "Connection abandoned.", func() {
+			is_connection_abandoned = true
+		})
+	}
+
 	var cmd *exec.Cmd
 	if is_snmp_command && !has_mibs_dir {
 		cmd = exec.Command(pa)
@@ -580,12 +693,27 @@ func ExecShell2(ws *websocket.Conn) {
 		cmd.Process.Kill()
 	})
 
-	if _, err := cmd.Process.Wait(); err != nil {
+	if err := cmd.Wait(); err != nil {
 		io.WriteString(ws, err.Error())
 	}
 	timer.Stop()
 	ws.Close()
-	cmd.Wait()
+
+	if is_connection_abandoned {
+		args = removeBatchOption(args)
+		var cmd = exec.Command(pa, args...)
+		if wd := query_params.Get("wd"); "" != wd {
+			cmd.Dir = wd
+		}
+
+		timer := time.AfterFunc(1*time.Minute, func() {
+			defer recover()
+			cmd.Process.Kill()
+		})
+		cmd.Stdin = strings.NewReader("y\ny\ny\ny\ny\ny\ny\ny\n")
+		cmd.Run()
+		timer.Stop()
+	}
 }
 
 func abs(s string) string {
