@@ -502,28 +502,12 @@ func Replay(ws *websocket.Conn) {
 }
 
 func ExecShell(ws *websocket.Conn) {
-	defer ws.Close()
-	is_snmp_command := false
-	has_mibs_dir := false
-
 	query_params := ws.Request().URL.Query()
-
-	pa := query_params.Get("exec")
-	if strings.HasPrefix(pa, "snmp") {
-		is_snmp_command = true
-	}
-	if c, ok := commands[pa]; ok {
-		pa = c
-	}
-
+	wd := query_params.Get("wd")
 	charset := query_params.Get("charset")
-	if "" == charset {
-		if "windows" == runtime.GOOS {
-			charset = "GB18030"
-		} else {
-			charset = "UTF-8"
-		}
-	}
+	pa := query_params.Get("exec")
+	timeout := query_params.Get("timeout")
+
 	args := make([]string, 0, 10)
 	for i := 0; i < 1000; i++ {
 		arguments, ok := query_params["arg"+strconv.FormatInt(int64(i), 10)]
@@ -531,74 +515,30 @@ func ExecShell(ws *websocket.Conn) {
 			break
 		}
 		for _, argument := range arguments {
-			if is_snmp_command && "-M" == argument {
-				has_mibs_dir = true
-			}
 			args = append(args, argument)
 		}
 	}
 
-	timeout := 10 * time.Minute
-	if to := query_params.Get("timeout"); "" != to {
-		if t, e := time.ParseDuration(to); nil == e {
-			timeout = t
-		}
-	}
+	execShell(ws, pa, args, charset, wd, timeout)
+}
 
-	is_connection_abandoned := false
-	var output io.Writer = decodeBy(charset, ws)
-	if pp := strings.ToLower(pa); strings.HasSuffix(pp, "plink.exe") || strings.HasSuffix(pp, "plink") {
-		output = matchBy(output, "Connection abandoned.", func() {
-			is_connection_abandoned = true
-		})
-	}
+func ExecShell2(ws *websocket.Conn) {
+	query_params := ws.Request().URL.Query()
+	wd := query_params.Get("wd")
+	charset := query_params.Get("charset")
+	pa := query_params.Get("exec")
+	timeout := query_params.Get("timeout")
 
-	var cmd *exec.Cmd
-	if is_snmp_command && !has_mibs_dir {
-		cmd = exec.Command(pa)
-		cmd.Args = append(cmd.Args, "-M")
-		cmd.Args = append(cmd.Args, *mibs_dir)
-		cmd.Args = append(cmd.Args, args...)
-	} else {
-		cmd = exec.Command(pa, args...)
-	}
-
-	if wd := query_params.Get("wd"); "" != wd {
-		cmd.Dir = wd
-	}
-	cmd.Stdin = ws
-	cmd.Stderr = output
-	cmd.Stdout = output
-	if err := cmd.Start(); err != nil {
-		io.WriteString(ws, err.Error())
+	ss, e := shellwords.Split(pa)
+	if nil != e {
+		io.WriteString(ws, "命令格式不正确：")
+		io.WriteString(ws, e.Error())
 		return
 	}
+	pa = ss[0]
+	args := ss[1:]
 
-	timer := time.AfterFunc(timeout, func() {
-		defer recover()
-		cmd.Process.Kill()
-	})
-	if err := cmd.Wait(); err != nil {
-		io.WriteString(ws, err.Error())
-	}
-	timer.Stop()
-	ws.Close()
-
-	if is_connection_abandoned {
-		args = removeBatchOption(args)
-		var cmd = exec.Command(pa, args...)
-		if wd := query_params.Get("wd"); "" != wd {
-			cmd.Dir = wd
-		}
-
-		timer := time.AfterFunc(1*time.Minute, func() {
-			defer recover()
-			cmd.Process.Kill()
-		})
-		cmd.Stdin = strings.NewReader("y\ny\ny\ny\ny\ny\ny\ny\n")
-		cmd.Run()
-		timer.Stop()
-	}
+	execShell(ws, pa, args, charset, wd, timeout)
 }
 
 func removeBatchOption(args []string) []string {
@@ -615,22 +555,35 @@ func removeBatchOption(args []string) []string {
 	return args[:offset]
 }
 
-func ExecShell2(ws *websocket.Conn) {
-	defer ws.Close()
-	is_snmp_command := false
+func addMibDir(args []string) []string {
 	has_mibs_dir := false
-
-	query_params := ws.Request().URL.Query()
-
-	pa := query_params.Get("exec")
-	if strings.HasPrefix(pa, "snmp") {
-		is_snmp_command = true
+	for _, argument := range args {
+		if "-M" == argument {
+			has_mibs_dir = true
+		}
 	}
+
+	if !has_mibs_dir {
+		new_args := make([]string, len(args)+2)
+		new_args[0] = "-M"
+		new_args[1] = *mibs_dir
+		copy(new_args[2:], args)
+		args = new_args
+	}
+	return args
+}
+
+func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, timeout_str string) {
+	defer ws.Close()
+
+	if strings.HasPrefix(pa, "snmp") {
+		args = addMibDir(args)
+	}
+
 	if c, ok := commands[pa]; ok {
 		pa = c
 	}
 
-	charset := query_params.Get("charset")
 	if "" == charset {
 		if "windows" == runtime.GOOS {
 			charset = "GB18030"
@@ -639,23 +592,9 @@ func ExecShell2(ws *websocket.Conn) {
 		}
 	}
 
-	ss, e := shellwords.Split(pa)
-	if nil != e {
-		io.WriteString(ws, "命令格式不正确：")
-		io.WriteString(ws, e.Error())
-		return
-	}
-	pa = ss[0]
-	args := ss[1:]
-	for _, argument := range args {
-		if is_snmp_command && "-M" == argument {
-			has_mibs_dir = true
-		}
-	}
-
 	timeout := 10 * time.Minute
-	if to := query_params.Get("timeout"); "" != to {
-		if t, e := time.ParseDuration(to); nil == e {
+	if "" != timeout_str {
+		if t, e := time.ParseDuration(timeout_str); nil == e {
 			timeout = t
 		}
 	}
@@ -668,22 +607,13 @@ func ExecShell2(ws *websocket.Conn) {
 		})
 	}
 
-	var cmd *exec.Cmd
-	if is_snmp_command && !has_mibs_dir {
-		cmd = exec.Command(pa)
-		cmd.Args = append(cmd.Args, "-M")
-		cmd.Args = append(cmd.Args, *mibs_dir)
-		cmd.Args = append(cmd.Args, args...)
-	} else {
-		cmd = exec.Command(pa, args...)
-	}
-
-	if wd := query_params.Get("wd"); "" != wd {
+	cmd := exec.Command(pa, args...)
+	if "" != wd {
 		cmd.Dir = wd
 	}
 	cmd.Stdin = ws
-	cmd.Stderr = decodeBy(charset, ws)
-	cmd.Stdout = cmd.Stderr
+	cmd.Stderr = output
+	cmd.Stdout = output
 	if err := cmd.Start(); err != nil {
 		io.WriteString(ws, err.Error())
 		return
@@ -702,7 +632,7 @@ func ExecShell2(ws *websocket.Conn) {
 	if is_connection_abandoned {
 		args = removeBatchOption(args)
 		var cmd = exec.Command(pa, args...)
-		if wd := query_params.Get("wd"); "" != wd {
+		if "" != wd {
 			cmd.Dir = wd
 		}
 
