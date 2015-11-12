@@ -546,20 +546,24 @@ func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, timeou
 	ws.Close()
 
 	if is_connection_abandoned {
-		args = removeBatchOption(args)
-		var cmd = exec.Command(pa, args...)
-		if "" != wd {
-			cmd.Dir = wd
-		}
-
-		timer := time.AfterFunc(1*time.Minute, func() {
-			defer recover()
-			cmd.Process.Kill()
-		})
-		cmd.Stdin = strings.NewReader("y\ny\ny\ny\ny\ny\ny\ny\n")
-		cmd.Run()
-		timer.Stop()
+		saveSessionKey(pa, args, wd)
 	}
+}
+
+func saveSessionKey(pa string, args []string, wd string) {
+	args = removeBatchOption(args)
+	var cmd = exec.Command(pa, args...)
+	if "" != wd {
+		cmd.Dir = wd
+	}
+
+	timer := time.AfterFunc(1*time.Minute, func() {
+		defer recover()
+		cmd.Process.Kill()
+	})
+	cmd.Stdin = strings.NewReader("y\ny\ny\ny\ny\ny\ny\ny\n")
+	cmd.Run()
+	timer.Stop()
 }
 
 func abs(s string) string {
