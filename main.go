@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"time"
 
-	"code.google.com/p/mahonia"
+	"golang.org/x/text/transform"
+
 	"github.com/kardianos/osext"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/net/websocket"
 
-	//"encoding/hex"
 	"flag"
 	"fmt"
 	"io"
@@ -49,6 +49,7 @@ func (w *consoleReader) Read(p []byte) (n int, err error) {
 	}
 	return
 }
+
 func (w *consoleReader) Close() error {
 	return w.dst.Close()
 }
@@ -60,101 +61,16 @@ func warp(dst io.ReadCloser, dump io.Writer) io.ReadCloser {
 	return &consoleReader{out: dump, dst: dst}
 }
 
-type decodeWriter struct {
-	out     io.Writer
-	buf     [8]byte
-	length  int
-	decoder mahonia.Decoder
-}
-
-func (w *decodeWriter) Write(p []byte) (c int, e error) {
-	data := p
-	if 0 != w.length {
-		if len(p) <= 8-w.length {
-			copy(w.buf[w.length:], p)
-			w.length += len(p)
-			n, cdata, e := w.decoder.Translate(w.buf[:w.length], false)
-			if nil != e {
-				return 0, e
-			}
-			if 0 == n {
-				//fmt.Println(w.length)
-				//fmt.Println(hex.EncodeToString(w.buf[:]))
-				return len(p), nil
-			}
-			//fmt.Println(string(cdata))
-			if _, e = w.out.Write(cdata); nil != e {
-				return 0, e
-			}
-			w.length -= n
-
-			if 0 != w.length {
-				copy(w.buf[:], w.buf[n:])
-			}
-			//fmt.Println(w.length)
-			//fmt.Println(hex.EncodeToString(w.buf[:]))
-			return len(p), nil
-		}
-		old := w.length
-		copy(w.buf[w.length:], data[:8-w.length])
-		w.length = 8
-		n, cdata, e := w.decoder.Translate(w.buf[:], false)
-		if nil != e {
-			return 0, e
-		}
-		if 0 == n {
-			panic("n == 0?")
-		}
-		if old > n {
-			panic("old > n?")
-		}
-		w.length -= n
-		if nil != cdata {
-			//fmt.Println(string(cdata))
-			if _, e = w.out.Write(cdata); nil != e {
-				return 0, e
-			}
-		}
-		data = p[n-old:]
-	}
-
-	n, cdata, e := w.decoder.Translate(data, false)
-	if nil != e {
-		return 0, e
-	}
-	if nil != cdata {
-		//fmt.Println(string(cdata))
-		if _, e = w.out.Write(cdata); nil != e {
-			return 0, e
-		}
-	}
-	w.length = len(data) - n
-	if 0 != w.length {
-		if 8 <= w.length {
-			panic("8 <= w.length?")
-		}
-		copy(w.buf[:], data[n:])
-		w.length = len(data) - n
-	}
-
-	//fmt.Println(w.length)
-	//fmt.Println(hex.EncodeToString(w.buf[:]))
-	return len(p), nil
-}
-
 func decodeBy(charset string, dst io.Writer) io.Writer {
 	if "UTF-8" == strings.ToUpper(charset) || "UTF8" == strings.ToUpper(charset) {
 		return dst
 	}
-	cs := mahonia.GetCharset(charset)
+	cs := GetCharset(charset)
 	if nil == cs {
 		panic("charset '" + charset + "' is not exists.")
 	}
-	//if *debug {
-	return &decodeWriter{out: dst, decoder: cs.NewDecoder()}
-	//} else {
-	//	return dst
-	//}
+
+	return transform.NewWriter(dst, cs.NewDecoder())
 }
 
 type matchWriter struct {
