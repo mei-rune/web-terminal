@@ -83,9 +83,6 @@ type matchWriter struct {
 
 func (w *matchWriter) match(p []byte) {
 	if len(p) > len(w.excepted) {
-
-		fmt.Println("===================")
-		fmt.Println(string(p))
 		if bytes.Contains(p, w.excepted) {
 			w.is_matched = true
 			w.buf.Reset()
@@ -94,8 +91,6 @@ func (w *matchWriter) match(p []byte) {
 		}
 		w.buf.Write(p[:len(w.excepted)-1])
 
-		fmt.Println("===================")
-		fmt.Println(w.buf.String())
 		if bytes.Contains(w.buf.Bytes(), w.excepted) {
 			w.is_matched = true
 			w.buf.Reset()
@@ -111,8 +106,6 @@ func (w *matchWriter) match(p []byte) {
 		return
 	}
 
-	fmt.Println("===================")
-	fmt.Println(w.buf.String())
 	if bytes.Contains(w.buf.Bytes(), w.excepted) {
 		w.is_matched = true
 		w.buf.Reset()
