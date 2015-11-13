@@ -611,6 +611,9 @@ func fillCommands(executableFolder string) {
 	if pa, ok := lookPath(executableFolder, "nmap/nmap"); ok {
 		commands["nmap"] = pa
 	}
+	if pa, ok := lookPath(executableFolder, "putty/plink"); ok {
+		commands["plink"] = pa
+	}
 }
 
 func main() {
