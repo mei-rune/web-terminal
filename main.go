@@ -599,7 +599,7 @@ func fillCommands(executableFolder string) {
 	for _, nm := range []string{"snmpget", "snmpgetnext", "snmpdf", "snmpbulkget",
 		"snmpbulkwalk", "snmpdelta", "snmpnetstat", "snmpset", "snmpstatus",
 		"snmptable", "snmptest", "snmptools", "snmptranslate", "snmptrap", "snmpusm",
-		"snmpvacm", "snmpwalk"} {
+		"snmpvacm", "snmpwalk", "wshell"} {
 		if pa, ok := lookPath(executableFolder, nm); ok {
 			commands[nm] = pa
 		}
