@@ -497,14 +497,19 @@ func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, timeou
 			io.WriteString(ws, e.Error())
 			return
 		}
-		defer f.Close()
+
+		filename := f.Name()
+		defer func() {
+			f.Close()
+			os.Remove(filename)
+		}()
+
 		_, e = io.WriteString(f, file_content)
 		if nil != e {
 			io.WriteString(ws, "写临时文件失败：")
 			io.WriteString(ws, e.Error())
 			return
 		}
-		filename := f.Name()
 		f.Close()
 
 		args = append(args, filename)
