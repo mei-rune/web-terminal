@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"io/ioutil"
 	"time"
 
 	"golang.org/x/text/transform"
@@ -411,6 +412,8 @@ func Replay(ws *websocket.Conn) {
 }
 
 func ExecShell(ws *websocket.Conn) {
+	defer ws.Close()
+
 	query_params := ws.Request().URL.Query()
 	wd := query_params.Get("wd")
 	charset := query_params.Get("charset")
@@ -432,6 +435,8 @@ func ExecShell(ws *websocket.Conn) {
 }
 
 func ExecShell2(ws *websocket.Conn) {
+	defer ws.Close()
+
 	query_params := ws.Request().URL.Query()
 	wd := query_params.Get("wd")
 	charset := query_params.Get("charset")
@@ -483,7 +488,27 @@ func addMibDir(args []string) []string {
 }
 
 func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, timeout_str string) {
-	defer ws.Close()
+	query_params := ws.Request().URL.Query()
+	if _, ok := query_params["file"]; ok {
+		file_content := query_params.Get("file")
+		f, e := ioutil.TempFile(os.TempDir(), "run")
+		if nil != e {
+			io.WriteString(ws, "生成临时文件失败：")
+			io.WriteString(ws, e.Error())
+			return
+		}
+		defer f.Close()
+		_, e = io.WriteString(f, file_content)
+		if nil != e {
+			io.WriteString(ws, "写临时文件失败：")
+			io.WriteString(ws, e.Error())
+			return
+		}
+		filename := f.Name()
+		f.Close()
+
+		args = append(args, filename)
+	}
 
 	if strings.HasPrefix(pa, "snmp") {
 		args = addMibDir(args)
