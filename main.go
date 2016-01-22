@@ -177,7 +177,8 @@ func SSHShell(ws *websocket.Conn) {
 		debug = true
 	}
 
-	interactive_count := 0
+	password_count := 0
+	empty_interactive_count := 0
 	reader := bufio.NewReader(ws)
 	// Dial code is taken from the ssh package example
 	config := &ssh.ClientConfig{
@@ -186,8 +187,8 @@ func SSHShell(ws *websocket.Conn) {
 			ssh.Password(pwd),
 			ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) (answers []string, err error) {
 				if len(questions) == 0 {
-
-					if interactive_count++; interactive_count > 50 {
+					empty_interactive_count++
+					if empty_interactive_count++; empty_interactive_count > 50 {
 						return nil, errors.New("interactive count is too much")
 					}
 					return []string{}, nil
@@ -197,10 +198,12 @@ func SSHShell(ws *websocket.Conn) {
 
 					switch strings.ToLower(strings.TrimSpace(question)) {
 					case "password:", "password as":
-						answers = append(answers, pwd)
-						if interactive_count++; interactive_count > 50 {
-							return nil, errors.New("interactive count is too much")
+						password_count++
+						if password_count == 1 {
+							answers = append(answers, pwd)
+							break
 						}
+						fallthrough
 					default:
 						line, _, e := reader.ReadLine()
 						if nil != e {
@@ -293,10 +296,43 @@ func SSHExec(ws *websocket.Conn) {
 		cmd_alias = strings.Replace(cmd, " ", "_", -1)
 	}
 
+	password_count := 0
+	empty_interactive_count := 0
+	reader := bufio.NewReader(ws)
 	// Dial code is taken from the ssh package example
 	config := &ssh.ClientConfig{
 		User: user,
-		Auth: []ssh.AuthMethod{ssh.Password(pwd)},
+		Auth: []ssh.AuthMethod{
+			ssh.Password(pwd),
+			ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) (answers []string, err error) {
+				if len(questions) == 0 {
+					empty_interactive_count++
+					if empty_interactive_count++; empty_interactive_count > 50 {
+						return nil, errors.New("interactive count is too much")
+					}
+					return []string{}, nil
+				}
+				for _, question := range questions {
+					io.WriteString(ws, question)
+
+					switch strings.ToLower(strings.TrimSpace(question)) {
+					case "password:", "password as":
+						password_count++
+						if password_count == 1 {
+							answers = append(answers, pwd)
+							break
+						}
+						fallthrough
+					default:
+						line, _, e := reader.ReadLine()
+						if nil != e {
+							return nil, e
+						}
+						answers = append(answers, string(line))
+					}
+				}
+				return answers, nil
+			})},
 	}
 	client, err := ssh.Dial("tcp", hostname+":"+port, config)
 	if err != nil {
