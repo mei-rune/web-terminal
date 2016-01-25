@@ -35,10 +35,30 @@ var (
 	is_debug = flag.Bool("debug", false, "show debug message.")
 	mibs_dir = flag.String("mibs_dir", "", "set mibs directory.")
 
-	commands = map[string]string{}
+	supportedCiphers = GetSupportedCiphers()
+	commands         = map[string]string{}
 
 	logs_dir = ""
 )
+
+func GetSupportedCiphers() []string {
+	config := &ssh.ClientConfig{}
+	config.SetDefaults()
+	for _, cipher := range []string{"aes128-cbc"} {
+		found := false
+		for _, defaultCipher := range config.Ciphers {
+			if cipher == defaultCipher {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			config.Ciphers = append(config.Ciphers, cipher)
+		}
+	}
+	return config.Ciphers
+}
 
 type consoleReader struct {
 	dst io.ReadCloser
@@ -182,7 +202,8 @@ func SSHShell(ws *websocket.Conn) {
 	reader := bufio.NewReader(ws)
 	// Dial code is taken from the ssh package example
 	config := &ssh.ClientConfig{
-		User: user,
+		Config: ssh.Config{Ciphers: supportedCiphers},
+		User:   user,
 		Auth: []ssh.AuthMethod{
 			ssh.Password(pwd),
 			ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) (answers []string, err error) {
@@ -301,7 +322,8 @@ func SSHExec(ws *websocket.Conn) {
 	reader := bufio.NewReader(ws)
 	// Dial code is taken from the ssh package example
 	config := &ssh.ClientConfig{
-		User: user,
+		Config: ssh.Config{Ciphers: supportedCiphers},
+		User:   user,
 		Auth: []ssh.AuthMethod{
 			ssh.Password(pwd),
 			ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) (answers []string, err error) {
