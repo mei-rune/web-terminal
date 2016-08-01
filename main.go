@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
+	"errors"
+	"io/ioutil"
 	"time"
 
 	"golang.org/x/text/transform"
@@ -32,10 +35,30 @@ var (
 	is_debug = flag.Bool("debug", false, "show debug message.")
 	mibs_dir = flag.String("mibs_dir", "", "set mibs directory.")
 
-	commands = map[string]string{}
+	supportedCiphers = GetSupportedCiphers()
+	commands         = map[string]string{}
 
 	logs_dir = ""
 )
+
+func GetSupportedCiphers() []string {
+	config := &ssh.ClientConfig{}
+	config.SetDefaults()
+	for _, cipher := range []string{"aes128-cbc"} {
+		found := false
+		for _, defaultCipher := range config.Ciphers {
+			if cipher == defaultCipher {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			config.Ciphers = append(config.Ciphers, cipher)
+		}
+	}
+	return config.Ciphers
+}
 
 type consoleReader struct {
 	dst io.ReadCloser
@@ -174,10 +197,45 @@ func SSHShell(ws *websocket.Conn) {
 		debug = true
 	}
 
+	password_count := 0
+	empty_interactive_count := 0
+	reader := bufio.NewReader(ws)
 	// Dial code is taken from the ssh package example
 	config := &ssh.ClientConfig{
-		User: user,
-		Auth: []ssh.AuthMethod{ssh.Password(pwd)},
+		Config: ssh.Config{Ciphers: supportedCiphers},
+		User:   user,
+		Auth: []ssh.AuthMethod{
+			ssh.Password(pwd),
+			ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) (answers []string, err error) {
+				if len(questions) == 0 {
+					empty_interactive_count++
+					if empty_interactive_count++; empty_interactive_count > 50 {
+						return nil, errors.New("interactive count is too much")
+					}
+					return []string{}, nil
+				}
+				for _, question := range questions {
+					io.WriteString(ws, question)
+
+					switch strings.ToLower(strings.TrimSpace(question)) {
+					case "password:", "password as":
+						password_count++
+						if password_count == 1 {
+							answers = append(answers, pwd)
+							break
+						}
+						fallthrough
+					default:
+						line, _, e := reader.ReadLine()
+						if nil != e {
+							return nil, e
+						}
+						answers = append(answers, string(line))
+					}
+				}
+				return answers, nil
+			}),
+		},
 	}
 	client, err := ssh.Dial("tcp", hostname+":"+port, config)
 	if err != nil {
@@ -259,10 +317,44 @@ func SSHExec(ws *websocket.Conn) {
 		cmd_alias = strings.Replace(cmd, " ", "_", -1)
 	}
 
+	password_count := 0
+	empty_interactive_count := 0
+	reader := bufio.NewReader(ws)
 	// Dial code is taken from the ssh package example
 	config := &ssh.ClientConfig{
-		User: user,
-		Auth: []ssh.AuthMethod{ssh.Password(pwd)},
+		Config: ssh.Config{Ciphers: supportedCiphers},
+		User:   user,
+		Auth: []ssh.AuthMethod{
+			ssh.Password(pwd),
+			ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) (answers []string, err error) {
+				if len(questions) == 0 {
+					empty_interactive_count++
+					if empty_interactive_count++; empty_interactive_count > 50 {
+						return nil, errors.New("interactive count is too much")
+					}
+					return []string{}, nil
+				}
+				for _, question := range questions {
+					io.WriteString(ws, question)
+
+					switch strings.ToLower(strings.TrimSpace(question)) {
+					case "password:", "password as":
+						password_count++
+						if password_count == 1 {
+							answers = append(answers, pwd)
+							break
+						}
+						fallthrough
+					default:
+						line, _, e := reader.ReadLine()
+						if nil != e {
+							return nil, e
+						}
+						answers = append(answers, string(line))
+					}
+				}
+				return answers, nil
+			})},
 	}
 	client, err := ssh.Dial("tcp", hostname+":"+port, config)
 	if err != nil {
@@ -411,6 +503,8 @@ func Replay(ws *websocket.Conn) {
 }
 
 func ExecShell(ws *websocket.Conn) {
+	defer ws.Close()
+
 	query_params := ws.Request().URL.Query()
 	wd := query_params.Get("wd")
 	charset := query_params.Get("charset")
@@ -432,6 +526,8 @@ func ExecShell(ws *websocket.Conn) {
 }
 
 func ExecShell2(ws *websocket.Conn) {
+	defer ws.Close()
+
 	query_params := ws.Request().URL.Query()
 	wd := query_params.Get("wd")
 	charset := query_params.Get("charset")
@@ -483,7 +579,32 @@ func addMibDir(args []string) []string {
 }
 
 func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, timeout_str string) {
-	defer ws.Close()
+	query_params := ws.Request().URL.Query()
+	if _, ok := query_params["file"]; ok {
+		file_content := query_params.Get("file")
+		f, e := ioutil.TempFile(os.TempDir(), "run")
+		if nil != e {
+			io.WriteString(ws, "生成临时文件失败：")
+			io.WriteString(ws, e.Error())
+			return
+		}
+
+		filename := f.Name()
+		defer func() {
+			f.Close()
+			os.Remove(filename)
+		}()
+
+		_, e = io.WriteString(f, file_content)
+		if nil != e {
+			io.WriteString(ws, "写临时文件失败：")
+			io.WriteString(ws, e.Error())
+			return
+		}
+		f.Close()
+
+		args = append(args, filename)
+	}
 
 	if strings.HasPrefix(pa, "snmp") {
 		args = addMibDir(args)
