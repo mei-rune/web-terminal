@@ -688,8 +688,12 @@ func abs(s string) string {
 	return r
 }
 
-func lookPath(executableFolder, pa string) (string, bool) {
-	for _, nm := range []string{pa + ".bat", pa + ".com", pa, pa + ".exe"} {
+func lookPath(executableFolder, pa string, alias ...string) (string, bool) {
+	names := []string{pa, pa + ".bat", pa + ".com", pa + ".exe"}
+	for _, aliasName := range alias {
+		names = append(names, aliasName, aliasName+".bat", aliasName+".com", aliasName, aliasName+".exe")
+	}
+	for _, nm := range names {
 		files := []string{nm,
 			filepath.Join("bin", nm),
 			filepath.Join("tools", nm),
@@ -732,7 +736,7 @@ func fillCommands(executableFolder string) {
 	if pa, ok := lookPath(executableFolder, "nmap/nmap"); ok {
 		commands["nmap"] = pa
 	}
-	if pa, ok := lookPath(executableFolder, "putty/plink"); ok {
+	if pa, ok := lookPath(executableFolder, "putty/plink", "ssh"); ok {
 		commands["plink"] = pa
 	}
 }
