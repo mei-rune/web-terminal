@@ -756,6 +756,10 @@ func fillCommands(executableFolder string) {
 	if pa, ok := lookPath(executableFolder, "putty/plink", "ssh"); ok {
 		commands["plink"] = pa
 	}
+
+	if pa, ok := lookPath(executableFolder, "dig"); ok {
+		commands["dig"] = pa
+	}
 }
 
 func main() {
