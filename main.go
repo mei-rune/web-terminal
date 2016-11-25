@@ -689,10 +689,18 @@ func abs(s string) string {
 }
 
 func lookPath(executableFolder, pa string, alias ...string) (string, bool) {
-	names := []string{pa, pa + ".bat", pa + ".com", pa + ".exe"}
-	for _, aliasName := range alias {
-		names = append(names, aliasName, aliasName+".bat", aliasName+".com", aliasName, aliasName+".exe")
+	names := []string{pa, pa + ".sh"}
+	if runtime.GOOS == "windows" {
+		names = []string{pa, pa + ".bat", pa + ".com", pa + ".exe"}
 	}
+	for _, aliasName := range alias {
+		if runtime.GOOS == "windows" {
+			names = append(names, aliasName, aliasName+".bat", aliasName+".com", aliasName, aliasName+".exe")
+		} else {
+			names = append(names, aliasName, aliasName+".sh")
+		}
+	}
+
 	for _, nm := range names {
 		files := []string{nm,
 			filepath.Join("bin", nm),
@@ -713,8 +721,17 @@ func lookPath(executableFolder, pa string, alias ...string) (string, bool) {
 		for _, file := range files {
 			file = abs(file)
 			if st, e := os.Stat(file); nil == e && nil != st && !st.IsDir() {
+
+				//fmt.Println("1=====", file, e)
 				return file, true
 			}
+		}
+	}
+
+	for _, nm := range names {
+		_, err := exec.LookPath(nm)
+		if nil == err {
+			return nm, true
 		}
 	}
 	return "", false
