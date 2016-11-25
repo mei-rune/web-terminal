@@ -744,6 +744,8 @@ func fillCommands(executableFolder string) {
 		"snmpvacm", "snmpwalk", "wshell"} {
 		if pa, ok := lookPath(executableFolder, nm); ok {
 			commands[nm] = pa
+		} else if pa, ok := lookPath(executableFolder, "netsnmp/"+nm); ok {
+			commands[nm] = pa
 		}
 	}
 
@@ -757,7 +759,7 @@ func fillCommands(executableFolder string) {
 		commands["plink"] = pa
 	}
 
-	if pa, ok := lookPath(executableFolder, "dig"); ok {
+	if pa, ok := lookPath(executableFolder, "dig/dig", "dig"); ok {
 		commands["dig"] = pa
 	}
 }
