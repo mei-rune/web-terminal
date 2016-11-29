@@ -749,6 +749,9 @@ func fillCommands(executableFolder string) {
 		}
 	}
 
+	if pa, ok := lookPath(executableFolder, "tpt"); ok {
+		commands["tpt"] = pa
+	}
 	if pa, ok := lookPath(executableFolder, "nmap/nping"); ok {
 		commands["nping"] = pa
 	}
