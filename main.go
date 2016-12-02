@@ -38,7 +38,8 @@ var (
 	supportedCiphers = GetSupportedCiphers()
 	commands         = map[string]string{}
 
-	logs_dir = ""
+	logs_dir         = ""
+	ExecutableFolder string
 )
 
 func GetSupportedCiphers() []string {
@@ -264,12 +265,12 @@ func SSHShell(ws *websocket.Conn) {
 
 	var combinedOut io.Writer = ws
 	if debug {
-		dump_out, err = os.OpenFile(logs_dir+hostname+".dump_ssh_out.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0)
+		dump_out, err = os.OpenFile(logs_dir+hostname+".dump_ssh_out.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
 		if nil == err {
 			combinedOut = io.MultiWriter(dump_out, ws)
 		}
 
-		dump_in, err = os.OpenFile(logs_dir+hostname+".dump_ssh_in.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0)
+		dump_in, err = os.OpenFile(logs_dir+hostname+".dump_ssh_in.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
 		if nil != err {
 			dump_in = nil
 		}
@@ -371,7 +372,7 @@ func SSHExec(ws *websocket.Conn) {
 
 	var combinedOut io.Writer = ws
 	if debug {
-		dump_out, err = os.OpenFile(logs_dir+hostname+"_"+cmd_alias+".dump_ssh_out.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0)
+		dump_out, err = os.OpenFile(logs_dir+hostname+"_"+cmd_alias+".dump_ssh_out.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
 		if nil == err {
 			fmt.Println("log to file", logs_dir+hostname+"_"+cmd_alias+".dump_ssh_out.txt")
 			combinedOut = io.MultiWriter(dump_out, ws)
@@ -379,7 +380,7 @@ func SSHExec(ws *websocket.Conn) {
 			fmt.Println("failed to open log file,", err)
 		}
 
-		dump_in, err = os.OpenFile(logs_dir+hostname+"_"+cmd_alias+".dump_ssh_in.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0)
+		dump_in, err = os.OpenFile(logs_dir+hostname+"_"+cmd_alias+".dump_ssh_in.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
 		if nil != err {
 			dump_in = nil
 			fmt.Println("failed to open log file,", err)
@@ -446,11 +447,11 @@ func TelnetShell(ws *websocket.Conn) {
 
 	if debug {
 		var err error
-		dump_out, err = os.OpenFile(logs_dir+hostname+".dump_telnet_out.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0)
+		dump_out, err = os.OpenFile(logs_dir+hostname+".dump_telnet_out.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
 		if nil != err {
 			dump_out = nil
 		}
-		dump_in, err = os.OpenFile(logs_dir+hostname+".dump_telnet_in.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0)
+		dump_in, err = os.OpenFile(logs_dir+hostname+".dump_telnet_in.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
 		if nil != err {
 			dump_in = nil
 		}
@@ -612,6 +613,10 @@ func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, timeou
 
 	if c, ok := commands[pa]; ok {
 		pa = c
+	} else {
+		if newPa, ok := lookPath(ExecutableFolder, pa); ok {
+			pa = newPa
+		}
 	}
 
 	if "" == charset {
@@ -645,9 +650,27 @@ func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, timeou
 	cmd.Stderr = output
 	cmd.Stdout = output
 	if err := cmd.Start(); err != nil {
-		io.WriteString(ws, err.Error())
-		return
+		if !os.IsPermission(err) || runtime.GOOS == "windows" {
+			io.WriteString(ws, err.Error())
+			return
+		}
+
+		newArgs := append(make([]string, len(args)+1))
+		newArgs[0] = pa
+		copy(newArgs[1:], args)
+		cmd = exec.Command("sh", newArgs...)
+		if "" != wd {
+			cmd.Dir = wd
+		}
+		cmd.Stdin = ws
+		cmd.Stderr = output
+		cmd.Stdout = output
+		if err := cmd.Start(); err != nil {
+			io.WriteString(ws, err.Error())
+			return
+		}
 	}
+
 	timer := time.AfterFunc(timeout, func() {
 		defer recover()
 		cmd.Process.Kill()
@@ -688,14 +711,11 @@ func abs(s string) string {
 	return r
 }
 
-func lookPath(executableFolder, pa string, alias ...string) (string, bool) {
-	names := []string{pa, pa + ".sh"}
-	if runtime.GOOS == "windows" {
-		names = []string{pa, pa + ".bat", pa + ".com", pa + ".exe"}
-	}
+func lookPath(executableFolder string, alias ...string) (string, bool) {
+	var names []string
 	for _, aliasName := range alias {
 		if runtime.GOOS == "windows" {
-			names = append(names, aliasName, aliasName+".bat", aliasName+".com", aliasName, aliasName+".exe")
+			names = append(names, aliasName, aliasName+".bat", aliasName+".com", aliasName+".exe")
 		} else {
 			names = append(names, aliasName, aliasName+".sh")
 		}
@@ -719,9 +739,9 @@ func lookPath(executableFolder, pa string, alias ...string) (string, bool) {
 			filepath.Join(executableFolder, "..", "tools", nm),
 			filepath.Join(executableFolder, "..", "runtime_env", nm)}
 		for _, file := range files {
+			// fmt.Println("====", file)
 			file = abs(file)
 			if st, e := os.Stat(file); nil == e && nil != st && !st.IsDir() {
-
 				//fmt.Println("1=====", file, e)
 				return file, true
 			}
@@ -779,6 +799,7 @@ func main() {
 		fmt.Println(e)
 		return
 	}
+	ExecutableFolder = executableFolder
 
 	files := []string{"logs",
 		filepath.Join("..", "logs"),
