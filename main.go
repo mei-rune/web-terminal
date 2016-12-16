@@ -31,9 +31,10 @@ import (
 )
 
 var (
-	listen   = flag.String("listen", ":37079", "the port of http")
-	is_debug = flag.Bool("debug", false, "show debug message.")
-	mibs_dir = flag.String("mibs_dir", "", "set mibs directory.")
+	sh_execute = "bash"
+	listen     = flag.String("listen", ":37079", "the port of http")
+	is_debug   = flag.Bool("debug", false, "show debug message.")
+	mibs_dir   = flag.String("mibs_dir", "", "set mibs directory.")
 
 	supportedCiphers = GetSupportedCiphers()
 	commands         = map[string]string{}
@@ -41,6 +42,10 @@ var (
 	logs_dir         = ""
 	ExecutableFolder string
 )
+
+func init() {
+	flag.StringVar(&sh_execute, "sh_execute", "bash", "the shell path")
+}
 
 func GetSupportedCiphers() []string {
 	config := &ssh.ClientConfig{}
@@ -658,7 +663,7 @@ func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, timeou
 		newArgs := append(make([]string, len(args)+1))
 		newArgs[0] = pa
 		copy(newArgs[1:], args)
-		cmd = exec.Command("sh", newArgs...)
+		cmd = exec.Command(sh_execute, newArgs...)
 		if "" != wd {
 			cmd.Dir = wd
 		}
