@@ -208,8 +208,9 @@ func SSHShell(ws *websocket.Conn) {
 	reader := bufio.NewReader(ws)
 	// Dial code is taken from the ssh package example
 	config := &ssh.ClientConfig{
-		Config: ssh.Config{Ciphers: supportedCiphers},
-		User:   user,
+		Config:          ssh.Config{Ciphers: supportedCiphers},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		User:            user,
 		Auth: []ssh.AuthMethod{
 			ssh.Password(pwd),
 			ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) (answers []string, err error) {
@@ -328,8 +329,9 @@ func SSHExec(ws *websocket.Conn) {
 	reader := bufio.NewReader(ws)
 	// Dial code is taken from the ssh package example
 	config := &ssh.ClientConfig{
-		Config: ssh.Config{Ciphers: supportedCiphers},
-		User:   user,
+		Config:          ssh.Config{Ciphers: supportedCiphers},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		User:            user,
 		Auth: []ssh.AuthMethod{
 			ssh.Password(pwd),
 			ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) (answers []string, err error) {
