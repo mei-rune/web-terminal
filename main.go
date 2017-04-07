@@ -616,7 +616,7 @@ func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, timeou
 
 	if strings.HasPrefix(pa, "snmp") {
 		args = addMibDir(args)
-	} else if strings.HasPrefix(pa, "tpt") {
+	} else if pa == "tpt" || pa == "tpt.exe" {
 		args = append([]string{"-gbk=true"}, args...)
 	}
 
