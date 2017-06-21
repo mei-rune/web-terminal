@@ -658,7 +658,11 @@ func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, timeou
 	cmd.Stdin = ws
 	cmd.Stderr = output
 	cmd.Stdout = output
+
+	log.Println(cmd.Path, cmd.Args)
+
 	if err := cmd.Start(); err != nil {
+
 		if !os.IsPermission(err) || runtime.GOOS == "windows" {
 			io.WriteString(ws, err.Error())
 			return
@@ -674,6 +678,8 @@ func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, timeou
 		cmd.Stdin = ws
 		cmd.Stderr = output
 		cmd.Stdout = output
+
+		log.Println(cmd.Path, cmd.Args)
 		if err := cmd.Start(); err != nil {
 			io.WriteString(ws, err.Error())
 			return
