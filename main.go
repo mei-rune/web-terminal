@@ -587,6 +587,21 @@ func addMibDir(args []string) []string {
 }
 
 func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, timeout_str string) {
+	if "" == charset {
+		if "windows" == runtime.GOOS {
+			charset = "GB18030"
+		} else {
+			charset = "UTF-8"
+		}
+	}
+
+	timeout := 10 * time.Minute
+	if "" != timeout_str {
+		if t, e := time.ParseDuration(timeout_str); nil == e {
+			timeout = t
+		}
+	}
+
 	query_params := ws.Request().URL.Query()
 	if _, ok := query_params["file"]; ok {
 		file_content := query_params.Get("file")
@@ -614,6 +629,11 @@ func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, timeou
 		args = append(args, filename)
 	}
 
+	if pa == "ssh" && runtime.GOOS != "windows" {
+		linuxSSH(ws, args, charset, wd, timeout)
+		return
+	}
+
 	if strings.HasPrefix(pa, "snmp") {
 		args = addMibDir(args)
 	} else if pa == "tpt" || pa == "tpt.exe" {
@@ -625,21 +645,6 @@ func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, timeou
 	} else {
 		if newPa, ok := lookPath(ExecutableFolder, pa); ok {
 			pa = newPa
-		}
-	}
-
-	if "" == charset {
-		if "windows" == runtime.GOOS {
-			charset = "GB18030"
-		} else {
-			charset = "UTF-8"
-		}
-	}
-
-	timeout := 10 * time.Minute
-	if "" != timeout_str {
-		if t, e := time.ParseDuration(timeout_str); nil == e {
-			timeout = t
 		}
 	}
 
