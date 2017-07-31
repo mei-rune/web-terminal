@@ -2,5 +2,6 @@
 out/
 *.exe
 *.log
+*.bat
 log.txt
 web-terminal

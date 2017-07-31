@@ -75,6 +75,13 @@ func linuxSSH(ws *websocket.Conn, args []string, charset, wd string, timeout tim
 		return
 	}
 
+	go func() {
+		defer recover()
+
+		cmd.Process.Wait()
+		ws.Close()
+	}()
+
 	timer := time.AfterFunc(timeout, func() {
 		defer recover()
 		cmd.Process.Kill()

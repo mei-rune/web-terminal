@@ -518,6 +518,7 @@ func ExecShell(ws *websocket.Conn) {
 	charset := query_params.Get("charset")
 	pa := query_params.Get("exec")
 	timeout := query_params.Get("timeout")
+	stdin := query_params.Get("stdin")
 
 	args := make([]string, 0, 10)
 	for i := 0; i < 1000; i++ {
@@ -530,7 +531,7 @@ func ExecShell(ws *websocket.Conn) {
 		}
 	}
 
-	execShell(ws, pa, args, charset, wd, timeout)
+	execShell(ws, pa, args, charset, wd, stdin, timeout)
 }
 
 func ExecShell2(ws *websocket.Conn) {
@@ -541,6 +542,7 @@ func ExecShell2(ws *websocket.Conn) {
 	charset := query_params.Get("charset")
 	pa := query_params.Get("exec")
 	timeout := query_params.Get("timeout")
+	stdin := query_params.Get("stdin")
 
 	ss, e := shellwords.Split(pa)
 	if nil != e {
@@ -551,7 +553,7 @@ func ExecShell2(ws *websocket.Conn) {
 	pa = ss[0]
 	args := ss[1:]
 
-	execShell(ws, pa, args, charset, wd, timeout)
+	execShell(ws, pa, args, charset, wd, stdin, timeout)
 }
 
 func removeBatchOption(args []string) []string {
@@ -586,7 +588,7 @@ func addMibDir(args []string) []string {
 	return args
 }
 
-func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, timeout_str string) {
+func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, stdin, timeout_str string) {
 	if "" == charset {
 		if "windows" == runtime.GOOS {
 			charset = "GB18030"
@@ -660,7 +662,9 @@ func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, timeou
 	if "" != wd {
 		cmd.Dir = wd
 	}
-	cmd.Stdin = ws
+	if stdin == "on" {
+		cmd.Stdin = ws
+	}
 	cmd.Stderr = output
 	cmd.Stdout = output
 
@@ -691,6 +695,15 @@ func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, timeou
 		}
 	}
 
+	if stdin == "on" {
+		go func() {
+			defer recover()
+
+			cmd.Process.Wait()
+			ws.Close()
+		}()
+	}
+
 	timer := time.AfterFunc(timeout, func() {
 		defer recover()
 		cmd.Process.Kill()
@@ -700,7 +713,9 @@ func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, timeou
 		io.WriteString(ws, err.Error())
 	}
 	timer.Stop()
-	ws.Close()
+	if err := ws.Close(); err != nil {
+		log.Println(err)
+	}
 
 	if is_connection_abandoned {
 		saveSessionKey(pa, args, wd)
