@@ -695,22 +695,21 @@ func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, stdin,
 		}
 	}
 
-	if stdin == "on" {
-		go func() {
-			defer recover()
-
-			cmd.Process.Wait()
-			ws.Close()
-		}()
-	}
-
 	timer := time.AfterFunc(timeout, func() {
 		defer recover()
 		cmd.Process.Kill()
 	})
 
-	if err := cmd.Wait(); err != nil {
-		io.WriteString(ws, err.Error())
+	if stdin == "on" {
+		if state, err := cmd.Process.Wait(); err != nil {
+			io.WriteString(ws, err.Error())
+		} else if state != nil && !state.Success() {
+			io.WriteString(ws, state.String())
+		}
+	} else {
+		if err := cmd.Wait(); err != nil {
+			io.WriteString(ws, err.Error())
+		}
 	}
 	timer.Stop()
 	if err := ws.Close(); err != nil {
