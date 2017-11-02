@@ -5,28 +5,36 @@
         <title>Simple TTY</title>
         <link rel="shortcut icon" href="/static/favicon.ico">
         <style>
-            html {
-                background: #555;
-            }
-            .terminal {
-                margin: 20px auto;
-                width: 1280px;
-                height: 660px;
-                border: #000 solid 5px;
-                font-family: Menlo, monospace;
-                font-size: 13px;
-                color: #f0f0f0;
-                background: #000;
+            body {
+                font-family: helvetica, sans-serif, arial;
+                font-size: 1em;
+                color: #111;
             }
 
-            .terminal-cursor {
-                color: #000;
-                background: #f0f0f0;
+            h1 {
+                text-align: center;
             }
+
+            #terminal-container {
+                width: 800px;
+                height: 450px;
+                margin: 0 auto;
+                padding: 2px;
+            }
+
         </style>
+
+        <link rel="stylesheet" href="./xterm.css" />
+        <link rel="stylesheet" href="./addons/fullscreen/fullscreen.css" />
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/es6-promise/4.1.1/es6-promise.auto.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/fetch/1.0.0/fetch.min.js"></script>
+        <script src="./xterm.js" ></script>
+        <script src="./addons/attach/attach.js" ></script>
+        <script src="./addons/fit/fit.js" ></script>
+        <script src="./addons/fullscreen/fullscreen.js" ></script>
+        <script src="./addons/search/search.js" ></script>
     </head>
     <body>
-        <script src="/static/term.js"></script>
         <script>
             //根据QueryString参数名称获取值
             function getQueryStringByName(name){
@@ -48,6 +56,7 @@
             var is_debug=getQueryStringByName("debug")
             var user=getQueryStringByName("user")
             var password=getQueryStringByName("password")
+
 
             window.addEventListener('load', function() {
                 if (undefined == protocol || null == protocol || "" == protocol) {
@@ -80,50 +89,76 @@
                 // var parts = document.location.pathname.split('/')
                 //   , base = parts.slice(0, parts.length - 1).join('/') + '/'
                 //   , resource = base.substring(1) + 'ssh';
-                var target_url = "ws://" + document.location.host +"/"+protocol+"?hostname="+hostname+"&port="+port+"&user="+user+"&password="+password+"&columns=160&rows=44&debug="+is_debug
+                var target_url = "ws://" + document.location.host +"/"+protocol+"?hostname="+hostname+"&port="+port+"&user="+user+"&password="+password+"&debug="+is_debug
                 if("replay" == protocol) {
-                    target_url = "ws://" + document.location.host +"/"+protocol+"?file="+file+"&user="+user+"&password="+password+"&columns=160&rows=44"
+                    target_url = "ws://" + document.location.host +"/"+protocol+"?file="+file+"&user="+user+"&password="+password
                 } else if("ssh_exec" == protocol) {
-                    target_url = "ws://" + document.location.host +"/"+protocol+"?dump_file="+file+"&hostname="+hostname+"&port="+port+"&user="+user+"&password="+password+"&columns=160&rows=44&cmd="+cmd+"&debug="+is_debug
+                    target_url = "ws://" + document.location.host +"/"+protocol+"?dump_file="+file+"&hostname="+hostname+"&port="+port+"&user="+user+"&password="+password+"&cmd="+cmd+"&debug="+is_debug
                 }
                 console.log(target_url)
-                var socket = new WebSocket(target_url);
-                socket.onopen = function() {
-                    var term = new Terminal({
-                        cols: 160,
-                        rows: 44,
-                        colors: Terminal.xtermColors
-                    });
 
-                    term.on('data', function(data) {
-                        console.log(data)
-                        socket.send(data);
-                    });
 
-                    term.on('title', function(title) {
-                        document.title = title;
-                    });
-
-                    term.open(document.body);
-
-                    socket.onmessage = function(data) {
-                      console.log(data.data)
-                      if(startsWith(data.data, "%tpt%")) {
-                        alert(data.data.substring(5));
-                      } else {
-                        term.write(data.data);
-                      }
-                    };
-                    window.term = term;
-                    window.socket = socket;
-                }
-                socket.onerror = function() {
-                  alert("连接出错！");
-                };
-                socket.onclose  = function() {
-                    //term.destroy();
-                };
+                createTerminal(target_url);
             }, false);
         </script>
+
+        <div id="terminal-container"></div>
+        <div>
+
+
+        <div>
+          <h2>Actions</h2>
+          <p>
+            <label>Find next <input id="find-next"/></label>
+            <label>Find previous <input id="find-previous"/></label>
+          </p>
+        </div>
+        <div>
+          <h2>Options</h2>
+          <p>
+            <label><input type="checkbox" id="option-cursor-blink"> cursorBlink</label>
+          </p>
+          <p>
+            <label>
+              cursorStyle
+              <select id="option-cursor-style">
+                <option value="block">block</option>
+                <option value="underline">underline</option>
+                <option value="bar">bar</option>
+              </select>
+            </label>
+          </p>
+          <p>
+            <label>
+              bellStyle
+              <select id="option-bell-style">
+                <option value="">none</option>
+                <option value="sound">sound</option>
+                <option value="visual">visual</option>
+                <option value="both">both</option>
+              </select>
+            </label>
+          </p>
+          <p>
+            <label>scrollback <input type="number" id="option-scrollback" value="1000" /></label>
+          </p>
+          <p>
+            <label>tabStopWidth <input type="number" id="option-tabstopwidth" value="8" /></label>
+          </p>
+          <div>
+            <h3>Size</h3>
+            <div>
+              <div style="display: inline-block; margin-right: 16px;">
+                <label for="cols">Columns</label>
+                <input type="number" id="cols" value="80" />
+              </div>
+              <div style="display: inline-block; margin-right: 16px;">
+                <label for="rows">Rows</label>
+                <input type="number" id="rows" value="32" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <script src="./main.js" ></script>
     </body>
 </html>

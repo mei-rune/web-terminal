@@ -822,6 +822,8 @@ func fillCommands(executableFolder string) {
 }
 
 func main() {
+	var appRoot string
+	flag.StringVar(&appRoot, "url_prefix", "/", "url 前缀")
 	flag.Parse()
 	if nil != flag.Args() && 0 != len(flag.Args()) {
 		flag.Usage()
@@ -878,15 +880,15 @@ func main() {
 		filepath.Join(executableFolder, "web-terminal"),
 		filepath.Join(executableFolder, "lib", "web-terminal"),
 		filepath.Join(executableFolder, "..", "lib", "web-terminal")}
-	file := ""
+	resourceDir := ""
 	for _, nm := range files {
 		nm = abs(nm)
 		if st, e := os.Stat(nm); nil == e && nil != st && st.IsDir() {
-			file = nm
+			resourceDir = nm
 			break
 		}
 	}
-	if "" == file {
+	if "" == resourceDir {
 		buffer := bytes.NewBuffer(make([]byte, 0, 2048))
 		buffer.WriteString("[warn] root path is not found:\r\n")
 		for _, nm := range files {
@@ -899,6 +901,13 @@ func main() {
 		return
 	}
 
+	if !strings.HasSuffix(appRoot, "/") {
+		appRoot = appRoot + "/"
+	}
+	if !strings.HasPrefix(appRoot, "/") {
+		appRoot = "/" + appRoot
+	}
+
 	http.Handle("/replay", websocket.Handler(Replay))
 	http.Handle("/ssh", websocket.Handler(SSHShell))
 	http.Handle("/telnet", websocket.Handler(TelnetShell))
@@ -906,10 +915,22 @@ func main() {
 	http.Handle("/cmd2", websocket.Handler(ExecShell2))
 	http.Handle("/ssh_exec", websocket.Handler(SSHExec))
 
-	//http.Handle("/", http.FileServer(http.Dir(filepath.Join(executableFolder, "static"))))
-	http.Handle("/", http.FileServer(http.Dir(file)))
-	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(file))))
-	fmt.Println("[web-terminal] listen at '" + *listen + "' with root is '" + file + "'")
+	if appRoot != "/" {
+		http.Handle(appRoot+"replay", websocket.Handler(Replay))
+		http.Handle(appRoot+"ssh", websocket.Handler(SSHShell))
+		http.Handle(appRoot+"telnet", websocket.Handler(TelnetShell))
+		http.Handle(appRoot+"cmd", websocket.Handler(ExecShell))
+		http.Handle(appRoot+"cmd2", websocket.Handler(ExecShell2))
+		http.Handle(appRoot+"ssh_exec", websocket.Handler(SSHExec))
+	}
+
+	http.Handle("/", http.FileServer(http.Dir(resourceDir)))
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(resourceDir))))
+
+	if appRoot != "/" {
+		http.Handle(appRoot+"static/", http.StripPrefix(appRoot+"static/", http.FileServer(http.Dir(resourceDir))))
+	}
+	fmt.Println("[web-terminal] listen at '" + *listen + "' with root is '" + resourceDir + "'")
 	err := http.ListenAndServe(*listen, nil)
 	if err != nil {
 		fmt.Println("ListenAndServe: " + err.Error())
