@@ -1,164 +1,127 @@
 <!doctype html>
 <html>
-    <head>
-        <meta name="author" content="runner.mei@gmail.com"/>
-        <title>Simple TTY</title>
-        <link rel="shortcut icon" href="/static/favicon.ico">
-        <style>
-            body {
-                font-family: helvetica, sans-serif, arial;
-                font-size: 1em;
-                color: #111;
-            }
+<head>
+    <meta name="author" content="runner.mei@gmail.com"/>
+    <title>Simple TTY</title>
+    <link rel="shortcut icon" href="/static/favicon.ico">
+    <style>
+        body {
+            margin-top: 0;
+            font-family: helvetica, sans-serif, arial;
+            font-size: 14px;
+            color: #111;
+        }
 
-            h1 {
-                text-align: center;
-            }
+        h1 {
+            text-align: center;
+        }
 
-            #terminal-container {
-                width: 800px;
-                height: 450px;
-                margin: 0 auto;
-                padding: 2px;
-            }
+        #terminal-container {
+            width: 800px;
+            height: 450px;
+            margin: 0 auto;
+            padding: 2px;
+        }
 
-        </style>
+        #options, #login {
+            width: 300px;
+            /*-webkit-transition: height .5s;*/
+            /*-moz-transition: height .5s;*/
+            /*-o-transition: height .5s;*/
+        }
 
-        <link rel="stylesheet" href="./xterm.css" />
-        <link rel="stylesheet" href="./addons/fullscreen/fullscreen.css" />
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/es6-promise/4.1.1/es6-promise.auto.min.js"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/fetch/1.0.0/fetch.min.js"></script>
-        <script src="./xterm.js" ></script>
-        <script src="./addons/attach/attach.js" ></script>
-        <script src="./addons/fit/fit.js" ></script>
-        <script src="./addons/fullscreen/fullscreen.js" ></script>
-        <script src="./addons/search/search.js" ></script>
-    </head>
-    <body>
-        <script>
-            //根据QueryString参数名称获取值
-            function getQueryStringByName(name){
-              var result = location.search.match(new RegExp("[\?\&]" + name+ "=([^\&]+)","i"));
-              if(result == null || result.length < 1){
-                return "";
-              }
-              return result[1];
-            };
-            function startsWith(s, prefix){
-              return s.indexOf(prefix) == 0;
-            };
+        #options.active {
+            margin: 0;
+            height: 350px;
+        }
 
-            var protocol=getQueryStringByName("protocol")
-            var hostname=getQueryStringByName("hostname")
-            var file=getQueryStringByName("file")
-            var port=getQueryStringByName("port")
-            var cmd=getQueryStringByName("cmd")
-            var is_debug=getQueryStringByName("debug")
-            var user=getQueryStringByName("user")
-            var password=getQueryStringByName("password")
+        #login.active {
+            margin: 0;
+            height: 200px;
+        }
 
+        .hide {
+            display: none;
+        }
 
-            window.addEventListener('load', function() {
-                if (undefined == protocol || null == protocol || "" == protocol) {
-                  protocol= "ssh"
-                  if (undefined == port || null == port || "" == port) {
-                    port= "22"
-                  }
-                } else if( "telnet" == protocol) {
-                  if (undefined == port || null == port || "" == port) {
-                    port= "23"
-                  }
-                } else if( "ssh" == protocol) {
-                  if (undefined == port || null == port || "" == port) {
-                    port= "22"
-                  }
-                }
+    </style>
 
-                if("replay" == protocol) {
-                    if (undefined == file || null == file || "" == file) {
-                        alert("file is empty.")
-                        return
-                    }
-                } else {
-                    if (undefined == hostname || null == hostname || "" == hostname) {
-                        alert("hostname is empty.")
-                        return
-                    }
-                }
-
-                // var parts = document.location.pathname.split('/')
-                //   , base = parts.slice(0, parts.length - 1).join('/') + '/'
-                //   , resource = base.substring(1) + 'ssh';
-                var target_url = "ws://" + document.location.host +"/"+protocol+"?hostname="+hostname+"&port="+port+"&user="+user+"&password="+password+"&debug="+is_debug
-                if("replay" == protocol) {
-                    target_url = "ws://" + document.location.host +"/"+protocol+"?file="+file+"&user="+user+"&password="+password
-                } else if("ssh_exec" == protocol) {
-                    target_url = "ws://" + document.location.host +"/"+protocol+"?dump_file="+file+"&hostname="+hostname+"&port="+port+"&user="+user+"&password="+password+"&cmd="+cmd+"&debug="+is_debug
-                }
-                console.log(target_url)
-
-
-                createTerminal(target_url);
-            }, false);
-        </script>
-
-        <div id="terminal-container"></div>
-        <div>
-
-
-        <div>
-          <h2>Actions</h2>
-          <p>
-            <label>Find next <input id="find-next"/></label>
-            <label>Find previous <input id="find-previous"/></label>
-          </p>
+    <link rel="stylesheet" href="./xterm.css"/>
+    <link rel="stylesheet" href="./addons/fullscreen/fullscreen.css"/>
+    <script src="./xterm.js"></script>
+    <script src="./addons/attach/attach.js"></script>
+    <script src="./addons/fit/fit.js"></script>
+    <script src="./addons/fullscreen/fullscreen.js"></script>
+    <script src="./addons/search/search.js"></script>
+</head>
+<body>
+<div style="overflow: hidden;">
+    <div style="float:right;">
+        <p style="margin: 3px;height: 25px;line-height: 20px">
+          <label><input id="find-text"/></label>
+          <button id="find-next"     >查找</button>
+          <button id="find-previous" >向前</button>
+          <button id="toggle-options">选项</button>
+            <!-- button onclick="toggleLogin()">登录</button -->
+        </p>
+        <div id="login" class="hide">
+            <h2 style="margin-top:0">请输入用户名和密码</h2>
+            <p>
+                <label>用户名 <input type="text" id="userName"> </label>
+            </p>
+            <p>
+                <label>密码 <input type="password" id="password"></label>
+            </p>
+            <button id="ssh-login">确认</button>
         </div>
-        <div>
-          <h2>Options</h2>
-          <p>
-            <label><input type="checkbox" id="option-cursor-blink"> cursorBlink</label>
-          </p>
-          <p>
-            <label>
-              cursorStyle
-              <select id="option-cursor-style">
-                <option value="block">block</option>
-                <option value="underline">underline</option>
-                <option value="bar">bar</option>
-              </select>
-            </label>
-          </p>
-          <p>
-            <label>
-              bellStyle
-              <select id="option-bell-style">
-                <option value="">none</option>
-                <option value="sound">sound</option>
-                <option value="visual">visual</option>
-                <option value="both">both</option>
-              </select>
-            </label>
-          </p>
-          <p>
-            <label>scrollback <input type="number" id="option-scrollback" value="1000" /></label>
-          </p>
-          <p>
-            <label>tabStopWidth <input type="number" id="option-tabstopwidth" value="8" /></label>
-          </p>
-          <div>
-            <h3>Size</h3>
+        <div id="options" class="hide">
+            <h2 style="margin-top:0">选项</h2>
+            <p>
+                <label><input type="checkbox" id="option-cursor-blink"> 光标闪烁</label>
+            </p>
+            <p>
+                <label>
+                    光标样式
+                    <select id="option-cursor-style">
+                        <option value="block">block</option>
+                        <option value="underline">underline</option>
+                        <option value="bar">bar</option>
+                    </select>
+                </label>
+            </p>
+            <p>
+                <label>
+                    铃声(试验性功能)
+                    <select id="option-bell-style">
+                        <option value="">none</option>
+                        <option value="sound">sound</option>
+                        <option value="visual">visual</option>
+                        <option value="both">both</option>
+                    </select>
+                </label>
+            </p>
+            <p>
+                <label>屏幕缓冲区 <input type="number" id="option-scrollback" value="1000"/></label>
+            </p>
+            <p>
+                <label>Tab 字符宽度 <input type="number" id="option-tabstopwidth" value="8"/></label>
+            </p>
             <div>
-              <div style="display: inline-block; margin-right: 16px;">
-                <label for="cols">Columns</label>
-                <input type="number" id="cols" value="80" />
-              </div>
-              <div style="display: inline-block; margin-right: 16px;">
-                <label for="rows">Rows</label>
-                <input type="number" id="rows" value="32" />
-              </div>
+                <h3>大小</h3>
+                <p>
+                    <label for="cols">列</label>
+                    <input type="number" id="cols" value="80"/>
+                </p>
+                <p>
+                    <label for="rows">行</label>
+                    <input type="number" id="rows" value="32"/>
+                </p>
             </div>
-          </div>
         </div>
-        <script src="./main.js" ></script>
-    </body>
+    </div>
+</div>
+<div id="terminal-container"></div>
+<script src="./main.js"></script>
+
+</body>
 </html>

@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/text/transform"
 
+	rice "github.com/GeertJohan/go.rice"
 	"github.com/kardianos/osext"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/net/websocket"
@@ -924,14 +925,19 @@ func main() {
 		http.Handle(appRoot+"ssh_exec", websocket.Handler(SSHExec))
 	}
 
-	http.Handle("/", http.FileServer(http.Dir(resourceDir)))
-	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(resourceDir))))
+	templateBox, err := rice.FindBox("static")
+	if err != nil {
+		fmt.Println(errors.New("load static directory fail, " + err.Error()))
+		return
+	}
+	httpFS := http.FileServer(templateBox.HTTPBox())
 
+	http.Handle("/static/", http.StripPrefix("/static/", httpFS))
 	if appRoot != "/" {
-		http.Handle(appRoot+"static/", http.StripPrefix(appRoot+"static/", http.FileServer(http.Dir(resourceDir))))
+		http.Handle(appRoot+"static/", http.StripPrefix(appRoot+"static/", httpFS))
 	}
 	fmt.Println("[web-terminal] listen at '" + *listen + "' with root is '" + resourceDir + "'")
-	err := http.ListenAndServe(*listen, nil)
+	err = http.ListenAndServe(*listen, nil)
 	if err != nil {
 		fmt.Println("ListenAndServe: " + err.Error())
 	}
