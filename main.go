@@ -801,6 +801,8 @@ func fillCommands(executableFolder string) {
 			commands[nm] = pa
 		} else if pa, ok := lookPath(executableFolder, "netsnmp/"+nm); ok {
 			commands[nm] = pa
+		} else if pa, ok := lookPath(executableFolder, "net-snmp/"+nm); ok {
+			commands[nm] = pa
 		}
 	}
 
