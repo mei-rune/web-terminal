@@ -640,7 +640,9 @@ func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, stdin,
 	if strings.HasPrefix(pa, "snmp") {
 		args = addMibDir(args)
 	} else if pa == "tpt" || pa == "tpt.exe" {
-		args = append([]string{"-gbk=true"}, args...)
+		if "windows" == runtime.GOOS {
+			args = append([]string{"-gbk=true"}, args...)
+		}
 	}
 
 	if c, ok := commands[pa]; ok {
