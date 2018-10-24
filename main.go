@@ -204,6 +204,15 @@ func SSHShell(ws *websocket.Conn) {
 		debug = true
 	}
 
+	charset := ws.Request().URL.Query().Get("charset")
+	if "" == charset {
+		if "windows" == runtime.GOOS {
+			charset = "GB18030"
+		} else {
+			charset = "UTF-8"
+		}
+	}
+
 	password_count := 0
 	empty_interactive_count := 0
 	reader := bufio.NewReader(ws)
@@ -223,7 +232,7 @@ func SSHShell(ws *websocket.Conn) {
 					return []string{}, nil
 				}
 				for _, question := range questions {
-					io.WriteString(ws, question)
+					io.WriteString(decodeBy(charset, ws), question)
 
 					switch strings.ToLower(strings.TrimSpace(question)) {
 					case "password:", "password as":
@@ -270,11 +279,11 @@ func SSHShell(ws *websocket.Conn) {
 		return
 	}
 
-	var combinedOut io.Writer = ws
+	var combinedOut io.Writer = decodeBy(charset, ws)
 	if debug {
 		dump_out, err = os.OpenFile(logs_dir+hostname+".dump_ssh_out.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
 		if nil == err {
-			combinedOut = io.MultiWriter(dump_out, ws)
+			combinedOut = io.MultiWriter(dump_out, combinedOut)
 		}
 
 		dump_in, err = os.OpenFile(logs_dir+hostname+".dump_ssh_in.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
