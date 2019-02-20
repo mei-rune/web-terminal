@@ -657,9 +657,12 @@ func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, stdin,
 	if c, ok := commands[pa]; ok {
 		pa = c
 	} else {
-		if newPa, ok := lookPath(ExecutableFolder, pa); ok {
-			pa = newPa
-		}
+		io.WriteString(ws, "'"+pa+"' 不在信任列表中")
+		return
+
+		// if newPa, ok := lookPath(ExecutableFolder, pa); ok {
+		// 	pa = newPa
+		// }
 	}
 
 	is_connection_abandoned := false
@@ -803,7 +806,7 @@ func lookPath(executableFolder string, alias ...string) (string, bool) {
 	return "", false
 }
 
-func fillCommands(executableFolder string) {
+func loadCommands(executableFolder string) {
 	for _, nm := range []string{"snmpget", "snmpgetnext", "snmpdf", "snmpbulkget",
 		"snmpbulkwalk", "snmpdelta", "snmpnetstat", "snmpset", "snmpstatus",
 		"snmptable", "snmptest", "snmptools", "snmptranslate", "snmptrap", "snmpusm",
@@ -832,6 +835,14 @@ func fillCommands(executableFolder string) {
 	}
 	if pa, ok := lookPath(executableFolder, "dig/dig", "dig"); ok {
 		commands["dig"] = pa
+	}
+
+	if pa, ok := lookPath(executableFolder, "ping"); ok {
+		commands["ping"] = pa
+	}
+
+	if pa, ok := lookPath(executableFolder, "tracert"); ok {
+		commands["tracert"] = pa
 	}
 }
 
@@ -885,7 +896,64 @@ func main() {
 		}
 	}
 
-	fillCommands(executableFolder)
+	loadCommands(executableFolder)
+
+	var commandList string
+	for _, nm := range []string{filepath.Join("conf", "commands.list"),
+		filepath.Join("..", "conf", "commands.list"),
+		filepath.Join(executableFolder, "conf", "commands.list"),
+		filepath.Join(executableFolder, "..", "conf", "commands.list")} {
+		nm = abs(nm)
+		if st, e := os.Stat(nm); nil == e && nil != st && !st.IsDir() {
+			commandList = nm
+			break
+		}
+	}
+
+	if commandList != "" {
+		bs, err := ioutil.ReadFile(commandList)
+		if err != nil {
+			log.Fatalln("load '"+commandList+"' fail,", err)
+			return
+		}
+
+		scanner := bufio.NewScanner(bytes.NewReader(bs))
+		for scanner.Scan() {
+			if len(scanner.Bytes()) == 0 {
+				continue
+			}
+
+			bs := bytes.TrimSpace(bs)
+			if len(bs) == 0 {
+				continue
+			}
+
+			idx := bytes.IndexByte(bs, '=')
+			if idx < 0 {
+				commands[string(bs)] = string(bs)
+				continue
+			}
+
+			name := bytes.TrimSpace(bs[:idx])
+			value := bytes.TrimSpace(bs[idx+1:])
+
+			if len(name) == 0 {
+				if len(value) == 0 {
+					continue
+				}
+				commands[string(value)] = string(value)
+				continue
+			}
+
+			if len(value) == 0 {
+				commands[string(name)] = string(name)
+				continue
+			}
+
+			commands[string(name)] = string(value)
+		}
+		log.Println("load '" + commandList + "' ok")
+	}
 
 	files = []string{"web-terminal",
 		filepath.Join("lib", "web-terminal"),
@@ -902,6 +970,7 @@ func main() {
 			break
 		}
 	}
+
 	if "" == resourceDir {
 		buffer := bytes.NewBuffer(make([]byte, 0, 2048))
 		buffer.WriteString("[warn] root path is not found:\r\n")
@@ -940,7 +1009,7 @@ func main() {
 
 	templateBox, err := rice.FindBox("static")
 	if err != nil {
-		fmt.Println(errors.New("load static directory fail, " + err.Error()))
+		log.Println(errors.New("load static directory fail, " + err.Error()))
 		return
 	}
 	httpFS := http.FileServer(templateBox.HTTPBox())
@@ -949,9 +1018,9 @@ func main() {
 	if appRoot != "/" {
 		http.Handle(appRoot+"static/", http.StripPrefix(appRoot+"static/", httpFS))
 	}
-	fmt.Println("[web-terminal] listen at '" + *listen + "' with root is '" + resourceDir + "'")
+	log.Println("[web-terminal] listen at '" + *listen + "' with root is '" + resourceDir + "'")
 	err = http.ListenAndServe(*listen, nil)
 	if err != nil {
-		fmt.Println("ListenAndServe: " + err.Error())
+		log.Println("ListenAndServe: " + err.Error())
 	}
 }
