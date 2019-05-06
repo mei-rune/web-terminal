@@ -1,4 +1,4 @@
-package main
+package terminal
 
 import (
 	"bufio"
@@ -33,7 +33,6 @@ import (
 
 var (
 	sh_execute = "bash"
-	listen     = flag.String("listen", ":37079", "the port of http")
 	is_debug   = flag.Bool("debug", false, "show debug message.")
 	mibs_dir   = flag.String("mibs_dir", "", "set mibs directory.")
 
@@ -846,19 +845,18 @@ func loadCommands(executableFolder string) {
 	}
 }
 
-func main() {
-	var appRoot string
-	flag.StringVar(&appRoot, "url_prefix", "/", "url 前缀")
-	flag.Parse()
-	if nil != flag.Args() && 0 != len(flag.Args()) {
-		flag.Usage()
-		return
-	}
+func New(appRoot string) (http.Handler, error) {
+	//	var appRoot string
+	//	flag.StringVar(&appRoot, "url_prefix", "/", "url 前缀")
+	//	flag.Parse()
+	//	if nil != flag.Args() && 0 != len(flag.Args()) {
+	//		flag.Usage()
+	//		return
+	//	}
 
 	executableFolder, e := osext.ExecutableFolder()
 	if nil != e {
-		fmt.Println(e)
-		return
+		return nil, e
 	}
 	ExecutableFolder = executableFolder
 
@@ -913,8 +911,7 @@ func main() {
 	if commandList != "" {
 		bs, err := ioutil.ReadFile(commandList)
 		if err != nil {
-			log.Fatalln("load '"+commandList+"' fail,", err)
-			return
+			return nil, errors.New("load '" + commandList + "' fail," + err.Error())
 		}
 
 		scanner := bufio.NewScanner(bytes.NewReader(bs))
@@ -981,7 +978,7 @@ func main() {
 		}
 		buffer.Truncate(buffer.Len() - 2)
 		log.Println(buffer)
-		return
+		return nil, errors.New(buffer.String())
 	}
 
 	if !strings.HasSuffix(appRoot, "/") {
@@ -1009,8 +1006,7 @@ func main() {
 
 	templateBox, err := rice.FindBox("static")
 	if err != nil {
-		log.Println(errors.New("load static directory fail, " + err.Error()))
-		return
+		return nil, errors.New("load static directory fail, " + err.Error())
 	}
 	httpFS := http.FileServer(templateBox.HTTPBox())
 
@@ -1018,9 +1014,10 @@ func main() {
 	if appRoot != "/" {
 		http.Handle(appRoot+"static/", http.StripPrefix(appRoot+"static/", httpFS))
 	}
-	log.Println("[web-terminal] listen at '" + *listen + "' with root is '" + resourceDir + "'")
-	err = http.ListenAndServe(*listen, nil)
-	if err != nil {
-		log.Println("ListenAndServe: " + err.Error())
-	}
+	//	log.Println("[web-terminal] listen at '" + *listen + "' with root is '" + resourceDir + "'")
+	//	err = http.ListenAndServe(*listen, nil)
+	//	if err != nil {
+	//		log.Println("ListenAndServe: " + err.Error())
+	//	}
+	return http.DefaultServeMux, nil
 }
