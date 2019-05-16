@@ -656,8 +656,17 @@ func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, stdin,
 	if c, ok := commands[pa]; ok {
 		pa = c
 	} else {
-		io.WriteString(ws, "'"+pa+"' 不在信任列表中")
-		return
+		if !strings.HasPrefix(pa, "runtime_env/") {
+			io.WriteString(ws, "'"+pa+"' 不在信任列表中")
+			return
+		}
+
+		if c, ok := commands[strings.TrimPrefix(pa, "runtime_env/")]; ok {
+			pa = c
+		} else {
+			io.WriteString(ws, "'"+pa+"' 不在信任列表中")
+			return
+		}
 
 		// if newPa, ok := lookPath(ExecutableFolder, pa); ok {
 		// 	pa = newPa
@@ -835,13 +844,14 @@ func loadCommands(executableFolder string) {
 	if pa, ok := lookPath(executableFolder, "dig/dig", "dig"); ok {
 		commands["dig"] = pa
 	}
-
 	if pa, ok := lookPath(executableFolder, "ping"); ok {
 		commands["ping"] = pa
 	}
-
 	if pa, ok := lookPath(executableFolder, "tracert"); ok {
 		commands["tracert"] = pa
+	}
+	if pa, ok := lookPath(executableFolder, "traceroute"); ok {
+		commands["traceroute"] = pa
 	}
 }
 
