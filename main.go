@@ -37,7 +37,7 @@ var (
 	mibs_dir   = flag.String("mibs_dir", "", "set mibs directory.")
 
 	supportedCiphers = GetSupportedCiphers()
-	commands         = map[string]string{}
+	Commands         = map[string]string{}
 
 	logs_dir         = ""
 	ExecutableFolder string
@@ -653,7 +653,7 @@ func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, stdin,
 		}
 	}
 
-	if c, ok := commands[pa]; ok {
+	if c, ok := Commands[pa]; ok {
 		pa = c
 	} else {
 		if !strings.HasPrefix(pa, "runtime_env/") {
@@ -661,7 +661,7 @@ func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, stdin,
 			return
 		}
 
-		if c, ok := commands[strings.TrimPrefix(pa, "runtime_env/")]; ok {
+		if c, ok := Commands[strings.TrimPrefix(pa, "runtime_env/")]; ok {
 			pa = c
 		} else {
 			io.WriteString(ws, "'"+pa+"' 不在信任列表中")
@@ -820,38 +820,38 @@ func loadCommands(executableFolder string) {
 		"snmptable", "snmptest", "snmptools", "snmptranslate", "snmptrap", "snmpusm",
 		"snmpvacm", "snmpwalk", "wshell"} {
 		if pa, ok := lookPath(executableFolder, nm); ok {
-			commands[nm] = pa
+			Commands[nm] = pa
 		} else if pa, ok := lookPath(executableFolder, "netsnmp/"+nm); ok {
-			commands[nm] = pa
+			Commands[nm] = pa
 		} else if pa, ok := lookPath(executableFolder, "net-snmp/"+nm); ok {
-			commands[nm] = pa
+			Commands[nm] = pa
 		}
 	}
 
 	if pa, ok := lookPath(executableFolder, "tpt"); ok {
-		commands["tpt"] = pa
+		Commands["tpt"] = pa
 	}
 	if pa, ok := lookPath(executableFolder, "nmap/nping"); ok {
-		commands["nping"] = pa
+		Commands["nping"] = pa
 	}
 	if pa, ok := lookPath(executableFolder, "nmap/nmap"); ok {
-		commands["nmap"] = pa
+		Commands["nmap"] = pa
 	}
 	if pa, ok := lookPath(executableFolder, "putty/plink", "ssh"); ok {
-		commands["plink"] = pa
-		commands["ssh"] = pa
+		Commands["plink"] = pa
+		Commands["ssh"] = pa
 	}
 	if pa, ok := lookPath(executableFolder, "dig/dig", "dig"); ok {
-		commands["dig"] = pa
+		Commands["dig"] = pa
 	}
 	if pa, ok := lookPath(executableFolder, "ping"); ok {
-		commands["ping"] = pa
+		Commands["ping"] = pa
 	}
 	if pa, ok := lookPath(executableFolder, "tracert"); ok {
-		commands["tracert"] = pa
+		Commands["tracert"] = pa
 	}
 	if pa, ok := lookPath(executableFolder, "traceroute"); ok {
-		commands["traceroute"] = pa
+		Commands["traceroute"] = pa
 	}
 }
 
@@ -937,7 +937,7 @@ func New(appRoot string) (http.Handler, error) {
 
 			idx := bytes.IndexByte(bs, '=')
 			if idx < 0 {
-				commands[string(bs)] = string(bs)
+				Commands[string(bs)] = string(bs)
 				continue
 			}
 
@@ -948,16 +948,16 @@ func New(appRoot string) (http.Handler, error) {
 				if len(value) == 0 {
 					continue
 				}
-				commands[string(value)] = string(value)
+				Commands[string(value)] = string(value)
 				continue
 			}
 
 			if len(value) == 0 {
-				commands[string(name)] = string(name)
+				Commands[string(name)] = string(name)
 				continue
 			}
 
-			commands[string(name)] = string(value)
+			Commands[string(name)] = string(value)
 		}
 		log.Println("load '" + commandList + "' ok")
 	}
