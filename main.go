@@ -483,6 +483,8 @@ func TelnetShell(ws *websocket.Conn) {
 	conn.setWindowSize(byte(rows), byte(columns))
 
 	go func() {
+		defer client.Close()
+
 		_, err := io.Copy(decodeBy(charset, client), warp(ws, dump_out))
 		if nil != err {
 			logString(nil, "copy of stdin failed:"+err.Error())
