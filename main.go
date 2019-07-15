@@ -845,6 +845,7 @@ func loadCommands(executableFolder string) {
 	}
 	if pa, ok := lookPath(executableFolder, "dig/dig", "dig"); ok {
 		Commands["dig"] = pa
+		Commands["runtime_env/dig/dig"] = pa
 	}
 	if pa, ok := lookPath(executableFolder, "ping"); ok {
 		Commands["ping"] = pa
