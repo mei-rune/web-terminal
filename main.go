@@ -39,7 +39,7 @@ var (
 	supportedCiphers = GetSupportedCiphers()
 	Commands         = map[string]string{}
 
-	logs_dir         = ""
+	LogDir           = ""
 	ExecutableFolder string
 )
 
@@ -280,12 +280,12 @@ func SSHShell(ws *websocket.Conn) {
 
 	var combinedOut io.Writer = decodeBy(charset, ws)
 	if debug {
-		dump_out, err = os.OpenFile(logs_dir+hostname+".dump_ssh_out.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
+		dump_out, err = os.OpenFile(filepath.Join(LogDir, hostname+".dump_ssh_out.txt"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
 		if nil == err {
 			combinedOut = io.MultiWriter(dump_out, combinedOut)
 		}
 
-		dump_in, err = os.OpenFile(logs_dir+hostname+".dump_ssh_in.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
+		dump_in, err = os.OpenFile(filepath.Join(LogDir, hostname+".dump_ssh_in.txt"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
 		if nil != err {
 			dump_in = nil
 		}
@@ -388,20 +388,20 @@ func SSHExec(ws *websocket.Conn) {
 
 	var combinedOut io.Writer = ws
 	if debug {
-		dump_out, err = os.OpenFile(logs_dir+hostname+"_"+cmd_alias+".dump_ssh_out.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
+		dump_out, err = os.OpenFile(filepath.Join(LogDir, hostname+"_"+cmd_alias+".dump_ssh_out.txt"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
 		if nil == err {
-			fmt.Println("log to file", logs_dir+hostname+"_"+cmd_alias+".dump_ssh_out.txt")
+			fmt.Println("log to file", filepath.Join(LogDir, hostname+"_"+cmd_alias+".dump_ssh_out.txt"))
 			combinedOut = io.MultiWriter(dump_out, ws)
 		} else {
 			fmt.Println("failed to open log file,", err)
 		}
 
-		dump_in, err = os.OpenFile(logs_dir+hostname+"_"+cmd_alias+".dump_ssh_in.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
+		dump_in, err = os.OpenFile(filepath.Join(LogDir, hostname+"_"+cmd_alias+".dump_ssh_in.txt"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
 		if nil != err {
 			dump_in = nil
 			fmt.Println("failed to open log file,", err)
 		} else {
-			fmt.Println("log to file", logs_dir+hostname+"_"+cmd_alias+".dump_ssh_in.txt")
+			fmt.Println("log to file", filepath.Join(LogDir, hostname+"_"+cmd_alias+".dump_ssh_in.txt"))
 		}
 	}
 
@@ -463,11 +463,11 @@ func TelnetShell(ws *websocket.Conn) {
 
 	if debug {
 		var err error
-		dump_out, err = os.OpenFile(logs_dir+hostname+".dump_telnet_out.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
+		dump_out, err = os.OpenFile(filepath.Join(LogDir, hostname+".dump_telnet_out.txt"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
 		if nil != err {
 			dump_out = nil
 		}
-		dump_in, err = os.OpenFile(logs_dir+hostname+".dump_telnet_in.txt", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
+		dump_in, err = os.OpenFile(filepath.Join(LogDir, hostname+".dump_telnet_in.txt"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
 		if nil != err {
 			dump_in = nil
 		}
@@ -880,8 +880,8 @@ func New(appRoot string) (http.Handler, error) {
 	for _, nm := range files {
 		nm = abs(nm)
 		if st, e := os.Stat(nm); nil == e && nil != st && st.IsDir() {
-			logs_dir = nm + "/"
-			log.Println("'logs' directory is '" + logs_dir + "'")
+			LogDir = nm + "/"
+			log.Println("'logs' directory is '" + LogDir + "'")
 			break
 		}
 	}
