@@ -36,8 +36,7 @@ var (
 	is_debug   = flag.Bool("debug", false, "show debug message.")
 	mibs_dir   = flag.String("mibs_dir", "", "set mibs directory.")
 
-	supportedCiphers = GetSupportedCiphers()
-	Commands         = map[string]string{}
+	Commands = map[string]string{}
 
 	LogDir           = ""
 	ExecutableFolder string
@@ -45,25 +44,6 @@ var (
 
 func init() {
 	flag.StringVar(&sh_execute, "sh_execute", "bash", "the shell path")
-}
-
-func GetSupportedCiphers() []string {
-	config := &ssh.ClientConfig{}
-	config.SetDefaults()
-	for _, cipher := range []string{"aes128-cbc"} {
-		found := false
-		for _, defaultCipher := range config.Ciphers {
-			if cipher == defaultCipher {
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			config.Ciphers = append(config.Ciphers, cipher)
-		}
-	}
-	return config.Ciphers
 }
 
 type consoleReader struct {
@@ -217,7 +197,8 @@ func SSHShell(ws *websocket.Conn) {
 	reader := bufio.NewReader(ws)
 	// Dial code is taken from the ssh package example
 	config := &ssh.ClientConfig{
-		Config:          ssh.Config{Ciphers: supportedCiphers},
+		Config: ssh.Config{Ciphers: SupportedCiphers, KeyExchanges: SupportedKeyExchanges},
+		// Config:          ssh.Config{Ciphers: supportedCiphers},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		User:            user,
 		Auth: []ssh.AuthMethod{
@@ -338,7 +319,7 @@ func SSHExec(ws *websocket.Conn) {
 	reader := bufio.NewReader(ws)
 	// Dial code is taken from the ssh package example
 	config := &ssh.ClientConfig{
-		Config:          ssh.Config{Ciphers: supportedCiphers},
+		Config:          ssh.Config{Ciphers: SupportedCiphers, KeyExchanges: SupportedKeyExchanges},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		User:            user,
 		Auth: []ssh.AuthMethod{
@@ -827,6 +808,8 @@ func loadCommands(executableFolder string) {
 			Commands[nm] = pa
 		} else if pa, ok := lookPath(executableFolder, "net-snmp/"+nm); ok {
 			Commands[nm] = pa
+		} else {
+			Commands[nm] = nm
 		}
 	}
 
@@ -849,12 +832,18 @@ func loadCommands(executableFolder string) {
 	}
 	if pa, ok := lookPath(executableFolder, "ping"); ok {
 		Commands["ping"] = pa
+	} else {
+		Commands["ping"] = "ping"
 	}
 	if pa, ok := lookPath(executableFolder, "tracert"); ok {
 		Commands["tracert"] = pa
+	} else {
+		Commands["tracert"] = "tracert"
 	}
 	if pa, ok := lookPath(executableFolder, "traceroute"); ok {
 		Commands["traceroute"] = pa
+	} else {
+		Commands["traceroute"] = "traceroute"
 	}
 }
 
