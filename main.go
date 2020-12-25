@@ -4,19 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
-	"io/ioutil"
-	"time"
-
-	"golang.org/x/text/transform"
-
-	rice "github.com/GeertJohan/go.rice"
-	"github.com/kardianos/osext"
-	"golang.org/x/crypto/ssh"
-	"golang.org/x/net/websocket"
-
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -27,12 +18,18 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
+	rice "github.com/GeertJohan/go.rice"
 	"github.com/fd/go-shellwords/shellwords"
+	"github.com/kardianos/osext"
+	"golang.org/x/crypto/ssh"
+	"golang.org/x/net/websocket"
+	"golang.org/x/text/transform"
 )
 
 var (
-	usePlink   bool = true
+	usePlink   bool = false
 	sh_execute      = "bash"
 	is_debug        = flag.Bool("debug", false, "show debug message.")
 	mibs_dir        = flag.String("mibs_dir", "", "set mibs directory.")
@@ -45,7 +42,7 @@ var (
 
 func init() {
 	flag.StringVar(&sh_execute, "sh_execute", "bash", "the shell path")
-	flag.BoolVar(&usePlink, "use_plink", true, "用 plink 替换 ssh")
+	flag.BoolVar(&usePlink, "use_plink", false, "用 plink 替换 ssh")
 }
 
 type consoleReader struct {
