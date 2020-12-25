@@ -42,7 +42,7 @@ var (
 
 func init() {
 	flag.StringVar(&sh_execute, "sh_execute", "bash", "the shell path")
-	flag.BoolVar(&usePlink, "use_plink", false, "用 plink 替换 ssh")
+	flag.BoolVar(&usePlink, "use_external_ssh", false, "用 plink 替换 ssh")
 }
 
 type consoleReader struct {
@@ -157,7 +157,7 @@ func logString(ws io.Writer, msg string) {
 }
 
 func SSHShell(ws *websocket.Conn) {
-	if usePlink || "true" == strings.ToLower(ws.Request().URL.Query().Get("use_plink")) {
+	if usePlink || "true" == strings.ToLower(ws.Request().URL.Query().Get("use_external_ssh")) {
 		Plink(ws)
 		return
 	}
