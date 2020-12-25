@@ -6,7 +6,12 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"time"
 
 	"golang.org/x/net/websocket"
@@ -68,8 +73,6 @@ func linuxSSH(ws *websocket.Conn, args []string, charset, wd string, timeout tim
 	cmd.Stderr = output
 	cmd.Stdout = output
 
-	log.Println(cmd.Path, cmd.Args)
-
 	if err := cmd.Start(); err != nil {
 		io.WriteString(ws, err.Error())
 		return
@@ -83,6 +86,81 @@ func linuxSSH(ws *websocket.Conn, args []string, charset, wd string, timeout tim
 	}()
 
 	timer := time.AfterFunc(timeout, func() {
+		defer recover()
+		cmd.Process.Kill()
+	})
+
+	if err := cmd.Wait(); err != nil {
+		io.WriteString(ws, err.Error())
+	}
+	timer.Stop()
+	ws.Close()
+}
+
+func Plink(ws *websocket.Conn) {
+	defer ws.Close()
+	hostname := ws.Request().URL.Query().Get("hostname")
+	port := ws.Request().URL.Query().Get("port")
+	if port != "" {
+		hostname = net.JoinHostPort(hostname, port)
+	}
+
+	user := ws.Request().URL.Query().Get("user")
+	pwd := ws.Request().URL.Query().Get("password")
+	// columns := toInt(ws.Request().URL.Query().Get("columns"), 120)
+	// rows := toInt(ws.Request().URL.Query().Get("rows"), 80)
+	charset := ws.Request().URL.Query().Get("charset")
+	if "" == charset {
+		if "windows" == runtime.GOOS {
+			charset = "GB18030"
+		} else {
+			charset = "UTF-8"
+		}
+	}
+
+	pa := "plink"
+	if c, ok := Commands[pa]; ok {
+		pa = c
+	}
+	cmd := exec.Command(pa, "-pw", pwd, user+"@"+hostname)
+
+	var combinedOut io.Writer = decodeBy(charset, ws)
+	cmd.Stdout = combinedOut
+	cmd.Stderr = combinedOut
+	cmd.Stdin = ws
+
+	if *is_debug || "true" == strings.ToLower(ws.Request().URL.Query().Get("debug")) {
+		dump_out, err := os.OpenFile(filepath.Join(LogDir, strings.Replace(hostname, ":", "_", -1)+".dump_ssh_out.txt"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
+		if nil == err {
+			combinedOut = io.MultiWriter(dump_out, combinedOut)
+		} else {
+			defer dump_out.Close()
+		}
+
+		dump_in, err := os.OpenFile(filepath.Join(LogDir, strings.Replace(hostname, ":", "_", -1)+".dump_ssh_in.txt"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
+		if nil != err {
+			dump_in = nil
+		} else {
+			defer dump_in.Close()
+		}
+		cmd.Stdout = combinedOut
+		cmd.Stderr = combinedOut
+		cmd.Stdin = warp(ws, dump_in)
+	}
+
+	if err := cmd.Start(); err != nil {
+		io.WriteString(ws, err.Error())
+		return
+	}
+
+	go func() {
+		defer recover()
+
+		cmd.Process.Wait()
+		ws.Close()
+	}()
+
+	timer := time.AfterFunc(1*time.Hour, func() {
 		defer recover()
 		cmd.Process.Kill()
 	})

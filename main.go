@@ -32,9 +32,10 @@ import (
 )
 
 var (
-	sh_execute = "bash"
-	is_debug   = flag.Bool("debug", false, "show debug message.")
-	mibs_dir   = flag.String("mibs_dir", "", "set mibs directory.")
+	usePlink   bool = true
+	sh_execute      = "bash"
+	is_debug        = flag.Bool("debug", false, "show debug message.")
+	mibs_dir        = flag.String("mibs_dir", "", "set mibs directory.")
 
 	Commands = map[string]string{}
 
@@ -44,6 +45,7 @@ var (
 
 func init() {
 	flag.StringVar(&sh_execute, "sh_execute", "bash", "the shell path")
+	flag.BoolVar(&usePlink, "use_plink", true, "用 plink 替换 ssh")
 }
 
 type consoleReader struct {
@@ -158,6 +160,11 @@ func logString(ws io.Writer, msg string) {
 }
 
 func SSHShell(ws *websocket.Conn) {
+	if usePlink || "true" == strings.ToLower(ws.Request().URL.Query().Get("use_plink")) {
+		Plink(ws)
+		return
+	}
+
 	var dump_out, dump_in io.WriteCloser
 	defer func() {
 		ws.Close()
@@ -844,6 +851,32 @@ func loadCommands(executableFolder string) {
 		Commands["traceroute"] = pa
 	} else {
 		Commands["traceroute"] = "traceroute"
+	}
+
+	var files []string
+	if runtime.GOOS == "windows" {
+		files = []string{
+			"runtime_env\\putty\\plink.exe",
+			"C:\\Program Files\\hengwei\\runtime_env\\putty\\plink.exe",
+			filepath.Join(executableFolder, "plink.exe"),
+			"runtime_env\\putty\\plink_old.exe",
+			"C:\\Program Files\\hengwei\\runtime_env\\putty\\plink_old.exe",
+			filepath.Join(executableFolder, "plink_old.exe"),
+		}
+	} else {
+		files = []string{
+			"runtime_env/putty/plink",
+			"/usr/local/tpt/runtime_env/putty/plink",
+			filepath.Join(executableFolder, "plink"),
+			"runtime_env/putty/plink_old",
+			"/usr/local/tpt/runtime_env/putty/plink_old",
+			filepath.Join(executableFolder, "plink_old"),
+		}
+	}
+	for _, pa := range files {
+		if s, ok := lookPath(executableFolder, pa); ok {
+			Commands["plink"] = s
+		}
 	}
 }
 
