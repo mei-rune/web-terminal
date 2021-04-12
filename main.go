@@ -29,6 +29,7 @@ import (
 )
 
 var (
+	isWindows = runtime.GOOS == "windows"
 	usePlink   bool = false
 	sh_execute      = "bash"
 	is_debug        = flag.Bool("debug", false, "show debug message.")
@@ -668,6 +669,33 @@ func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, stdin,
 		})
 	}
 
+	if pa == "ping" {
+		if !isWindows {
+			hasCount := false
+			copyedArgs := make([]string, 0, len(args))
+			for _, arg := range args {
+				switch arg {
+				case "-i":
+					arg = "-t"
+				case "-l":
+					arg = "-s"
+				case "-n":
+					arg = "-c"
+					hasCount = true
+				case "-w":
+					arg = "-W"
+				case "-f":
+				}
+				copyedArgs = append(copyedArgs, arg)
+			}
+
+			if !hasCount {
+				copyedArgs = append(copyedArgs, "-c", "4")
+			}
+			args = copyedArgs
+		}
+	}
+
 	cmd := exec.Command(pa, args...)
 	if "" != wd {
 		cmd.Dir = wd
@@ -681,7 +709,6 @@ func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, stdin,
 	log.Println(cmd.Path, cmd.Args)
 
 	if err := cmd.Start(); err != nil {
-
 		if !os.IsPermission(err) || runtime.GOOS == "windows" {
 			io.WriteString(ws, err.Error())
 			return
