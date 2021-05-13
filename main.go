@@ -29,7 +29,7 @@ import (
 )
 
 var (
-	isWindows = runtime.GOOS == "windows"
+	isWindows       = runtime.GOOS == "windows"
 	usePlink   bool = false
 	sh_execute      = "bash"
 	is_debug        = flag.Bool("debug", false, "show debug message.")
@@ -80,6 +80,13 @@ func decodeBy(charset string, dst io.Writer) io.Writer {
 	}
 
 	return transform.NewWriter(dst, cs.NewDecoder())
+}
+
+func getErrText(pa, defText string) string {
+	if strings.HasSuffix(pa, "snmp") {
+		return "请安装一下 net-snmp-utils 包"
+	}
+	return defText
 }
 
 type matchWriter struct {
@@ -645,14 +652,14 @@ func execShell(ws *websocket.Conn, pa string, args []string, charset, wd, stdin,
 		pa = c
 	} else {
 		if !strings.HasPrefix(pa, "runtime_env/") {
-			io.WriteString(ws, "'"+pa+"' 不在信任列表中")
+			io.WriteString(ws, getErrText(pa, "'"+pa+"' 不在信任列表中"))
 			return
 		}
 
 		if c, ok := Commands[strings.TrimPrefix(pa, "runtime_env/")]; ok {
 			pa = c
 		} else {
-			io.WriteString(ws, "'"+pa+"' 不在信任列表中")
+			io.WriteString(ws, getErrText(pa, "'"+pa+"' 不在信任列表中"))
 			return
 		}
 
