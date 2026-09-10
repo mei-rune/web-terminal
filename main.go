@@ -165,7 +165,15 @@ func logString(ws io.Writer, msg string) {
 }
 
 func SSHShell(ws *websocket.Conn) {
+	hostname := ws.Request().URL.Query().Get("hostname")
+	port := ws.Request().URL.Query().Get("port")
+	if "" == port {
+		port = "22"
+	}
+
 	if usePlink || "true" == strings.ToLower(ws.Request().URL.Query().Get("use_external_ssh")) {
+		log.Println("use plink", hostname+":"+port)
+		logString(ws, "use plink\r\n")
 		Plink(ws)
 		return
 	}
@@ -181,11 +189,6 @@ func SSHShell(ws *websocket.Conn) {
 		}
 	}()
 
-	hostname := ws.Request().URL.Query().Get("hostname")
-	port := ws.Request().URL.Query().Get("port")
-	if "" == port {
-		port = "22"
-	}
 	user := ws.Request().URL.Query().Get("user")
 	pwd := ws.Request().URL.Query().Get("password")
 	columns := toInt(ws.Request().URL.Query().Get("columns"), 120)
@@ -246,11 +249,17 @@ func SSHShell(ws *websocket.Conn) {
 			}),
 		},
 	}
+
+	log.Println("connecting", hostname+":"+port)
+	logString(ws, "connecting\r\n")
 	client, err := ssh.Dial("tcp", hostname+":"+port, config)
 	if err != nil {
 		logString(ws, "Failed to dial: "+err.Error())
 		return
 	}
+
+	log.Println("connected", hostname+":"+port)
+	logString(ws, "connected\r\n")
 
 	session, err := client.NewSession()
 	if err != nil {
@@ -258,6 +267,9 @@ func SSHShell(ws *websocket.Conn) {
 		return
 	}
 	defer session.Close()
+
+	log.Println("new session connected", hostname+":"+port)
+	logString(ws, "new session connected\r\n")
 
 	// Set up terminal modes
 	modes := ssh.TerminalModes{
